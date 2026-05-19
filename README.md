@@ -1,2 +1,2 @@
 # GitBulk
-Parameterisierbares Script für Bulkoperation an GIT Repos
+Configurable script for bulk operations on Git repositories
