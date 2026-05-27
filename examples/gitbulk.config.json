@@ -1,0 +1,26 @@
+{
+  "rus": ["my-service-api", "my-service-frontend", "my-service-worker"],
+  "ticket": "AKB-1234",
+  "branch": "feature/update-dependencies",
+  "script": "./scripts/update-deps.sh",
+  "commitMessage": "feat: update shared dependencies",
+  "prSummary": "Update shared dependencies across services",
+  "createPrOnError": false,
+  "workspaceDir": "~/work/repos",
+  "cloneIfMissing": false,
+  "sourceBranch": "master",
+  "retry": {
+    "maxAttempts": 3,
+    "backoffMs": 1000,
+    "maxBackoffMs": 30000
+  },
+  "concurrency": 1,
+  "commandTimeoutMs": 120000,
+  "dryRun": false,
+  "prPlatform": "bitbucket",
+  "bitbucket": {
+    "workspace": "my-workspace",
+    "targetBranch": "master",
+    "reviewers": []
+  }
+}

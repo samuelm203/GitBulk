@@ -1,0 +1,511 @@
+/**
+ * Atomare Git-Operationen für Phase 3 des Flowcharts.
+ *
+ * Jede exportierte Funktion entspricht einer (oder wenigen) Flowchart-Boxen.
+ * Die Funktionen sind absichtlich klein und einzeln testbar.
+ *
+ * Schreibende Operationen respektieren `dryRun` und `skipHooks` aus den
+ * `BaseGitOptions`. Read-Only-Operationen (`status`, `revParse`, ...)
+ * ignorieren `dryRun` — sie haben keine Seiteneffekte.
+ *
+ * Convention: Operationen, die im Flowchart "müssen funktionieren"
+ * (fetch, reset, clean, add) werfen bei Fehler → `runGitChecked`.
+ * Operationen, deren Exit-Code Teil der Logik ist (commit, push), liefern
+ * das rohe `GitCommandResult` zurück.
+ */
+
+import { existsSync, statSync } from 'node:fs';
+import { join } from 'node:path';
+import { spawn } from 'node:child_process';
+
+import { runGit, runGitChecked, type GitCommandResult } from './executor.js';
+import type { Logger } from '../utils/logger.js';
+import { getDefaultLogger } from '../utils/logger.js';
+import {
+  retry,
+  type AttemptResult,
+  type RetryResult,
+  type RetryOptions,
+} from '../utils/retry.js';
+
+/**
+ * Gemeinsame Parameter für alle Operationen.
+ * Werden vom Runner (Phase 2) pro RU zusammengestellt und durchgereicht.
+ */
+export interface BaseGitOptions {
+  /** Pfad zum RU-Repository */
+  cwd: string;
+  /** Timeout in ms pro Git-Befehl */
+  timeoutMs: number;
+  /** Dry-Run-Modus (read-only Befehle ignorieren das Flag) */
+  dryRun: boolean;
+  /** Hooks deaktivieren? */
+  skipHooks: boolean;
+  /** Logger (typischerweise mit `withRu(name)` markiert) */
+  logger?: Logger;
+  /** Abort-Signal für kooperatives Cancel (Ctrl+C) */
+  signal?: AbortSignal;
+}
+
+/**
+ * Bündelt die Executor-Optionen aus den BaseGitOptions. Reine Convenience —
+ * spart Boilerplate in jeder Operation.
+ */
+function toExecOpts(base: BaseGitOptions, writeOp: boolean): {
+  cwd: string;
+  timeoutMs: number;
+  dryRun?: boolean;
+  skipHooks?: boolean;
+  logger?: Logger;
+  signal?: AbortSignal;
+} {
+  const opts: ReturnType<typeof toExecOpts> = {
+    cwd: base.cwd,
+    timeoutMs: base.timeoutMs,
+  };
+  if (writeOp && base.dryRun) opts.dryRun = true;
+  if (base.skipHooks) opts.skipHooks = true;
+  if (base.logger) opts.logger = base.logger;
+  if (base.signal) opts.signal = base.signal;
+  return opts;
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Phase 3.1 — Existenz-Check
+// ──────────────────────────────────────────────────────────────────
+
+/**
+ * Prüft, ob ein Verzeichnis ein Git-Repository ist.
+ * Flowchart: `[RU] not found locally` — diese Funktion liefert das `false`.
+ *
+ * @returns `true` wenn das Verzeichnis existiert UND `.git` enthält
+ */
+export function isGitRepository(repoPath: string): boolean {
+  if (!existsSync(repoPath)) return false;
+  try {
+    if (!statSync(repoPath).isDirectory()) return false;
+    const gitDir = join(repoPath, '.git');
+    if (!existsSync(gitDir)) return false;
+    // .git kann Verzeichnis (normal) oder Datei (worktree) sein — beides akzeptieren.
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Klont ein Repository in `targetDir`.
+ *
+ * Genutzt, wenn `$config.cloneIfMissing == true` (nicht im Flowchart — siehe
+ * Abweichungs-Liste). Aufrufer entscheidet, ob diese Funktion verwendet wird.
+ *
+ * @throws bei Spawn-Fehler oder Exit != 0
+ */
+export async function cloneRepo(
+  remoteUrl: string,
+  targetDir: string,
+  base: BaseGitOptions,
+): Promise<GitCommandResult> {
+  // `git clone` läuft NICHT im RU-Verzeichnis (existiert ja noch nicht),
+  // sondern im Parent-Verzeichnis von targetDir.
+  const opts: Parameters<typeof runGitChecked>[1] = {
+    cwd: process.cwd(),
+    timeoutMs: base.timeoutMs,
+    // Auch im Dry-Run nicht klonen, sonst kann die nachfolgende Verarbeitung nichts tun.
+    dryRun: base.dryRun,
+  };
+  if (base.skipHooks) opts.skipHooks = true;
+  if (base.logger) opts.logger = base.logger;
+  if (base.signal) opts.signal = base.signal;
+  return runGitChecked(['clone', remoteUrl, targetDir], opts);
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Phase 3.2 — Branch lesen & Status prüfen
+// ──────────────────────────────────────────────────────────────────
+
+/**
+ * Liest den aktuell ausgecheckten Branch.
+ * Flowchart: `Read current branch → save to [branch]`.
+ *
+ * Im "detached HEAD"-Zustand gibt `git rev-parse --abbrev-ref HEAD` `HEAD`
+ * zurück — wir liefern dann den Commit-Hash, damit der Cleanup-Checkout
+ * trotzdem funktioniert.
+ *
+ * @throws bei Fehler (Repo ohne Commits etc.)
+ */
+export async function readCurrentBranch(base: BaseGitOptions): Promise<string> {
+  // Read-only → kein dryRun
+  const result = await runGitChecked(['rev-parse', '--abbrev-ref', 'HEAD'], toExecOpts(base, false));
+  const branch = result.stdout.trim();
+
+  if (branch === 'HEAD') {
+    // Detached HEAD → Commit-Hash zurückgeben
+    const hashResult = await runGitChecked(['rev-parse', 'HEAD'], toExecOpts(base, false));
+    return hashResult.stdout.trim();
+  }
+
+  return branch;
+}
+
+/**
+ * Prüft, ob es uncommitted Changes gibt.
+ * Flowchart: `git status --porcelain` → `Output empty?`
+ *
+ * @returns `true` wenn der Working Tree dirty ist (Output nicht leer)
+ */
+export async function hasUncommittedChanges(base: BaseGitOptions): Promise<boolean> {
+  const result = await runGitChecked(['status', '--porcelain'], toExecOpts(base, false));
+  return result.stdout.trim().length > 0;
+}
+
+/**
+ * Stash mit dem im Flowchart definierten Marker.
+ * Flowchart: `git stash -u -m 'AUTO BACKUP'` → `is_stashed = true`
+ *
+ * `-u` = include untracked, `-m` = mit Message.
+ */
+export async function stashAutoBackup(base: BaseGitOptions): Promise<GitCommandResult> {
+  return runGitChecked(['stash', 'push', '-u', '-m', 'AUTO BACKUP'], toExecOpts(base, true));
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Phase 3.3 — Quell-Branch aktualisieren
+// ──────────────────────────────────────────────────────────────────
+
+/**
+ * Holt aktualisierte Refs vom Remote.
+ * Flowchart: `git fetch origin`
+ */
+export async function fetchOrigin(base: BaseGitOptions): Promise<GitCommandResult> {
+  return runGitChecked(['fetch', 'origin'], toExecOpts(base, true));
+}
+
+/**
+ * Checkt den Quell-Branch aus.
+ * Flowchart: `git checkout master` — bei uns konfigurierbar via `sourceBranch`.
+ */
+export async function checkoutSourceBranch(
+  sourceBranch: string,
+  base: BaseGitOptions,
+): Promise<GitCommandResult> {
+  return runGitChecked(['checkout', sourceBranch], toExecOpts(base, true));
+}
+
+/**
+ * Hard-Reset auf den Remote-Stand des Quell-Branches.
+ * Flowchart: `git reset --hard origin/master`
+ *
+ * Achtung: zerstört lokale Commits auf dem Quell-Branch. Das ist gewollt
+ * und entspricht dem Flowchart.
+ */
+export async function resetHardToOrigin(
+  sourceBranch: string,
+  base: BaseGitOptions,
+): Promise<GitCommandResult> {
+  return runGitChecked(['reset', '--hard', `origin/${sourceBranch}`], toExecOpts(base, true));
+}
+
+/**
+ * Entfernt untracked Files und Verzeichnisse.
+ * Flowchart: `git clean -fd`
+ */
+export async function cleanWorkingTree(base: BaseGitOptions): Promise<GitCommandResult> {
+  return runGitChecked(['clean', '-fd'], toExecOpts(base, true));
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Phase 3.4 — Feature-Branch anlegen
+// ──────────────────────────────────────────────────────────────────
+
+/**
+ * Baut den vollständigen Feature-Branch-Namen aus Ticket und Branch-Basis.
+ * Flowchart: `git checkout -b + [AKB Ticket] + [BranchName]`
+ *
+ * Trennzeichen: `-` (siehe Abweichung A2 — Flowchart ist mehrdeutig).
+ */
+export function buildFeatureBranchName(ticket: string, branch: string): string {
+  return `${ticket}-${branch}`;
+}
+
+/**
+ * Legt einen neuen Branch an und wechselt darauf.
+ * Flowchart: `git checkout -b [Branch]`
+ *
+ * @returns rohes Result — Aufrufer prüft `exitCode`, weil "Branch existiert
+ *          schon" ein erwarteter Fall sein kann (z. B. wenn GitBulk auf
+ *          demselben RU zweimal läuft).
+ */
+export async function createFeatureBranch(
+  branchName: string,
+  base: BaseGitOptions,
+): Promise<GitCommandResult> {
+  return runGit(['checkout', '-b', branchName], toExecOpts(base, true));
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Phase 3.4 — Code-Change-Skript ausführen
+// ──────────────────────────────────────────────────────────────────
+
+/**
+ * Führt das benutzerdefinierte Code-Change-Skript aus.
+ * Flowchart: `[Code_Change] execute` → `Exit-Code == 0?`
+ *
+ * Das Skript wird im RU-Verzeichnis ausgeführt. Es bekommt nützliche
+ * Umgebungsvariablen, damit es kontextabhängig agieren kann:
+ *
+ *   - `GITBULK_RU`            — Name der RU (Repository)
+ *   - `GITBULK_TICKET`        — Ticket-Identifier
+ *   - `GITBULK_BRANCH`        — Voll-qualifizierter Feature-Branch-Name
+ *   - `GITBULK_SOURCE_BRANCH` — Quell-Branch (z. B. master)
+ *
+ * Wird NICHT via `runGit` ausgeführt, weil es kein Git-Befehl ist.
+ *
+ * @returns `{ exitCode, stdout, stderr, timedOut }` — derselbe Shape wie
+ *          `GitCommandResult`, damit die Phase-3-Logik einheitlich
+ *          mit Exit-Codes umgehen kann.
+ */
+export async function executeCodeChange(
+  scriptPath: string,
+  contextEnv: {
+    ru: string;
+    ticket: string;
+    branch: string;
+    sourceBranch: string;
+  },
+  base: BaseGitOptions,
+): Promise<{ exitCode: number | null; stdout: string; stderr: string; timedOut: boolean }> {
+  const logger = base.logger ?? getDefaultLogger();
+
+  // ABSICHT: Im Dry-Run wird das Code-Change-Skript ECHT ausgeführt.
+  //
+  // Rationale: Der User soll sehen, was das Skript tatsächlich tun würde.
+  // Nur die schreibenden GIT-Operationen (add, commit, push) werden im
+  // Dry-Run übersprungen. Da der Cleanup-Schritt am Ende den Branch zurück-
+  // setzt und gestasht wiederherstellt, hinterlässt das Skript keine
+  // dauerhaften Spuren — der Working Tree ist nach dem Lauf sauber.
+  if (base.dryRun) {
+    logger.info(`[dry-run] executing code change script: ${scriptPath} (cwd=${base.cwd})`);
+  } else {
+    logger.debug(`executing code change script: ${scriptPath} (cwd=${base.cwd})`);
+  }
+
+  return new Promise((resolve, reject) => {
+    let timedOut = false;
+    let settled = false;
+
+    const child = spawn(scriptPath, [], {
+      cwd: base.cwd,
+      env: {
+        ...process.env,
+        GIT_TERMINAL_PROMPT: '0',
+        GITBULK_RU: contextEnv.ru,
+        GITBULK_TICKET: contextEnv.ticket,
+        GITBULK_BRANCH: contextEnv.branch,
+        GITBULK_SOURCE_BRANCH: contextEnv.sourceBranch,
+      },
+      shell: false,
+      windowsHide: true,
+      detached: process.platform !== 'win32',
+    });
+
+    const killTree = (signal: NodeJS.Signals): void => {
+      if (child.killed || settled) return;
+      try {
+        if (process.platform !== 'win32' && typeof child.pid === 'number') {
+          process.kill(-child.pid, signal);
+        } else {
+          child.kill(signal);
+        }
+      } catch {
+        /* prozess bereits weg */
+      }
+    };
+
+    const onAbort = (): void => {
+      if (!settled && !child.killed) killTree('SIGTERM');
+    };
+    base.signal?.addEventListener('abort', onAbort, { once: true });
+
+    const timeoutHandle = setTimeout(() => {
+      if (!settled && !child.killed) {
+        timedOut = true;
+        logger.warn(`code change script timed out after ${base.timeoutMs}ms`);
+        killTree('SIGTERM');
+        setTimeout(() => {
+          if (!settled && !child.killed) killTree('SIGKILL');
+        }, 2000).unref();
+      }
+    }, base.timeoutMs);
+    timeoutHandle.unref();
+
+    let stdout = '';
+    let stderr = '';
+    child.stdin?.end();
+    child.stdout?.setEncoding('utf8').on('data', (c: string) => (stdout += c));
+    child.stderr?.setEncoding('utf8').on('data', (c: string) => (stderr += c));
+
+    child.on('error', (err) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeoutHandle);
+      base.signal?.removeEventListener('abort', onAbort);
+      reject(new Error(`failed to spawn code change script: ${err.message}`));
+    });
+
+    child.on('close', (exitCode) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeoutHandle);
+      base.signal?.removeEventListener('abort', onAbort);
+      resolve({ exitCode, stdout, stderr, timedOut });
+    });
+  });
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Phase 3.5 — Stage & Commit
+// ──────────────────────────────────────────────────────────────────
+
+/**
+ * Staged alle Änderungen.
+ * Flowchart: `git add .`
+ */
+export async function stageAll(base: BaseGitOptions): Promise<GitCommandResult> {
+  return runGitChecked(['add', '.'], toExecOpts(base, true));
+}
+
+/**
+ * Erstellt einen Commit mit der gegebenen Message.
+ * Flowchart: `git commit -m '...'`
+ *
+ * @returns rohes Result — Aufrufer kann Exit != 0 (z. B. "nothing to commit")
+ *          gesondert behandeln.
+ */
+export async function commit(message: string, base: BaseGitOptions): Promise<GitCommandResult> {
+  return runGit(['commit', '-m', message], toExecOpts(base, true));
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Phase 3.6 — Push mit Retry-Loop
+// ──────────────────────────────────────────────────────────────────
+
+/**
+ * Patterns im stderr, bei denen ein Retry SINNLOS ist (permanente Fehler).
+ * Bei diesen Strings bricht der Push-Loop sofort ab (siehe Abweichung B11).
+ */
+const PUSH_PERMANENT_ERROR_PATTERNS: readonly RegExp[] = [
+  /authentication failed/i,
+  /could not read username/i,
+  /permission denied/i,
+  /access denied/i,
+  /repository not found/i,
+  /403 forbidden/i,
+  /protected branch/i,
+  /pre-receive hook declined/i,
+];
+
+/**
+ * Push-Operation mit Retry-Loop (Phase 3.6).
+ *
+ * Verwendet `--force-with-lease` wie im Flowchart vorgegeben — sicherer als
+ * `--force`, weil Updates auf dem Remote nicht überschrieben werden, die wir
+ * nicht gesehen haben.
+ *
+ * @param branchName - der Feature-Branch (Push-Ziel)
+ * @param base - Standardoptionen
+ * @param retryConfig - Retry-Parameter aus `$config.retry`
+ * @returns Retry-Result mit Erfolg / Erschöpfung / permanentem Fehler
+ */
+export async function pushFeatureBranch(
+  branchName: string,
+  base: BaseGitOptions,
+  retryConfig: { maxAttempts: number; backoffMs: number; maxBackoffMs: number },
+): Promise<RetryResult<GitCommandResult>> {
+  const logger = base.logger ?? getDefaultLogger();
+
+  const retryOpts: RetryOptions = {
+    maxAttempts: retryConfig.maxAttempts,
+    backoffMs: retryConfig.backoffMs,
+    maxBackoffMs: retryConfig.maxBackoffMs,
+    description: `push ${branchName}`,
+  };
+  if (base.logger) retryOpts.logger = base.logger;
+  if (base.signal) retryOpts.signal = base.signal;
+
+  return retry<GitCommandResult>(
+    async (): Promise<AttemptResult<GitCommandResult>> => {
+      const result = await runGit(
+        ['push', 'origin', branchName, '--force-with-lease'],
+        toExecOpts(base, true),
+      );
+
+      if (result.exitCode === 0) {
+        return { ok: true, value: result };
+      }
+
+      const combined = `${result.stderr}\n${result.stdout}`;
+      const isPermanent = PUSH_PERMANENT_ERROR_PATTERNS.some((pat) => pat.test(combined));
+
+      if (isPermanent) {
+        logger.warn(`push got permanent error: ${result.stderr.trim().split('\n')[0] ?? '(no stderr)'}`);
+        return {
+          ok: false,
+          retry: false,
+          error: result.stderr.trim() || `exit ${result.exitCode}`,
+        };
+      }
+
+      return {
+        ok: false,
+        retry: true,
+        error: result.stderr.trim() || `exit ${result.exitCode}`,
+      };
+    },
+    retryOpts,
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Phase 3.7 — Cleanup
+// ──────────────────────────────────────────────────────────────────
+
+/**
+ * Wechselt zurück zum ursprünglich gesicherten Branch.
+ * Flowchart: `git checkout [branch]`
+ */
+export async function checkoutBranch(
+  branchName: string,
+  base: BaseGitOptions,
+): Promise<GitCommandResult> {
+  return runGit(['checkout', branchName], toExecOpts(base, true));
+}
+
+/**
+ * `git stash pop` — nur sinnvoll, wenn vorher gestasht wurde.
+ * Flowchart: nach Checkout im Cleanup.
+ *
+ * @returns rohes Result — bei Conflict gibt's Exit != 0; das Flowchart
+ *          loggt dann `Cleanup [RU] failed manual fix`.
+ */
+export async function stashPop(base: BaseGitOptions): Promise<GitCommandResult> {
+  return runGit(['stash', 'pop'], toExecOpts(base, true));
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Phase 3.8 — Branch-Aufräumung (wenn kein PR)
+// ──────────────────────────────────────────────────────────────────
+
+/**
+ * Löscht den lokalen Feature-Branch hart.
+ * Flowchart: `git branch -D + [AKB Ticket] + [BranchName]`
+ *
+ * Wird ausgeführt, wenn `PR_Status != create_PR` — also wenn kein PR
+ * erstellt wird (z. B. weil Code-Change keinen Diff produzierte).
+ */
+export async function deleteLocalBranch(
+  branchName: string,
+  base: BaseGitOptions,
+): Promise<GitCommandResult> {
+  return runGit(['branch', '-D', branchName], toExecOpts(base, true));
+}

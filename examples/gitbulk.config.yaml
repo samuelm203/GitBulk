@@ -1,0 +1,80 @@
+# ──────────────────────────────────────────────────────────────
+# GitBulk — Beispielkonfiguration (YAML)
+# ──────────────────────────────────────────────────────────────
+
+# Pflichtfelder aus dem Flowchart (Phase 1)
+# ------------------------------------------
+
+# Liste der Repository-Units (RUs).
+# Kann als Array (empfohlen für YAML) oder als komma-separierter String stehen.
+rus:
+  - my-service-api
+  - my-service-frontend
+  - my-service-worker
+
+# Ticket-Identifier (wird im Branch-Namen vorangestellt: <ticket>-<branch>)
+ticket: AKB-1234
+
+# Branch-Name (Sonderzeichen werden automatisch ersetzt)
+branch: feature/update-dependencies
+
+# Pfad zum Code-Change-Skript. Wird pro RU im jeweiligen Repository ausgeführt.
+# Pfad ist absolut oder relativ zum CWD.
+script: ./scripts/update-deps.sh
+
+# Commit-Message bei erfolgreichem Code-Change
+commitMessage: "feat: update shared dependencies"
+
+# PR-Titel und/oder -Beschreibung
+prSummary: "Update shared dependencies across services"
+
+# Pull Request auch dann erstellen, wenn das Code-Change-Skript fehlschlägt?
+createPrOnError: false
+
+# Zusätzliche Felder (Datei-Modus)
+# ------------------------------------------
+
+# Wurzelverzeichnis, in dem die RU-Repositories liegen.
+# Standard: aktuelles Arbeitsverzeichnis.
+workspaceDir: ~/work/repos
+
+# Soll GitBulk fehlende Repos automatisch klonen?
+cloneIfMissing: false
+# cloneBaseUrl: https://bitbucket.org/my-workspace/   # Pflicht wenn cloneIfMissing: true
+
+# Quell-Branch (Flowchart: hardcoded "master" — bei uns konfigurierbar)
+sourceBranch: master
+
+# Push-Retry-Verhalten (Flowchart: max 3 Versuche mit Backoff)
+retry:
+  maxAttempts: 3
+  backoffMs: 1000
+  maxBackoffMs: 30000
+
+# Parallele Verarbeitung — 1 = sequentiell (wie Flowchart)
+concurrency: 1
+
+# Timeout pro Git-Befehl in ms
+commandTimeoutMs: 120000
+
+# Dry-Run: keine schreibenden Git-Operationen, keine PR-API-Calls
+dryRun: false
+
+# PR-Plattform-Konfiguration
+# ------------------------------------------
+
+prPlatform: bitbucket
+
+bitbucket:
+  workspace: my-workspace
+  # API-Variante: 'cloud' (api.bitbucket.org) oder 'server' (selbst-gehostet).
+  apiVariant: cloud
+  # apiBaseUrl: https://bitbucket.example.com   # Pflicht für apiVariant: server
+  targetBranch: master
+  reviewers:
+    - reviewer-username-1
+    - "{1234abcd-uuid-form}"
+
+# Hinweis: Der API-Token wird NICHT in der Datei abgelegt.
+# Setze ihn als Umgebungsvariable:
+#   export GITBULK_BITBUCKET_TOKEN=...
