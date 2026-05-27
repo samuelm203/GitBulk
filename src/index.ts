@@ -17,8 +17,3 @@
 
 export const VERSION = '0.1.0';
 
-* GitBulk - Public API
- *
- * Dieser Entry Point exportiert die öffentliche Programmier-API von GitBulk.
- * Damit lässt sich GitBulk nicht nur als CLI, sondern auch programmatisch
- *
