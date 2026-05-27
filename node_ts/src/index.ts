@@ -1,4 +1,6 @@
-/**aus eigenen Skripten heraus verwenden (sowohl TS als auch JS).
+/**
+ * GitBulk — öffentliche API zum programmatischen Verwenden aus eigenen
+ * Skripten heraus (sowohl TS als auch JS).
  *
  * @example TypeScript
  * ```ts

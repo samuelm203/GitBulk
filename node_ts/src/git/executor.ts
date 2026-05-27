@@ -72,6 +72,12 @@ export interface GitCommandOptions {
    */
   dryRun?: boolean;
   /**
+   * Wenn `true`, werden Git-Hooks deaktiviert, indem `core.hooksPath` auf
+   * ein nicht existierendes Ziel umgebogen wird (`/dev/null` auf POSIX,
+   * `NUL` auf Windows). Entspricht `$config.skipHooks`.
+   */
+  skipHooks?: boolean;
+  /**
    * Zusätzliche Umgebungsvariablen. Werden mit `process.env` gemerged.
    * Nützlich für `GIT_TERMINAL_PROMPT=0` (verhindert Auth-Prompts).
    */
@@ -102,18 +108,31 @@ export class GitExecutorError extends Error {
 }
 
 /**
+ * Plattform-portabler Pfad, auf den `core.hooksPath` gesetzt wird, wenn
+ * Hooks via `skipHooks` deaktiviert werden sollen. Beide Pfade existieren
+ * NIE als reguläres Verzeichnis, sodass git keine Hooks findet.
+ */
+const HOOKS_DEVNULL = process.platform === 'win32' ? 'NUL' : '/dev/null';
+
+/**
  * Standard-Argumente, die jedem Git-Aufruf vorangestellt werden.
- *
- * - `-c core.hooksPath=/dev/null` deaktiviert Hooks, damit
- *   z. B. pre-commit-Hooks beim Bulk-Lauf nicht das Verhalten verändern.
- *   Auskommentiert lassen, falls Hooks gewünscht sind.
  *
  * - Über `GIT_TERMINAL_PROMPT=0` (siehe `buildEnv`) wird verhindert,
  *   dass git interaktiv nach Credentials fragt → Timeout statt Hänger.
+ * - Hooks werden dynamisch via `-c core.hooksPath=...` deaktiviert,
+ *   wenn `options.skipHooks === true` ist (siehe `buildArgs`).
  */
-const GIT_GLOBAL_PREFIX: readonly string[] = [
-  // '-c', 'core.hooksPath=/dev/null',  // optional, aktuell deaktiviert
-];
+const GIT_GLOBAL_PREFIX: readonly string[] = [];
+
+/**
+ * Baut die finale Argument-Liste inklusive optionaler Hook-Deaktivierung.
+ */
+function buildArgs(args: readonly string[], skipHooks: boolean): string[] {
+  const prefix = skipHooks
+    ? [...GIT_GLOBAL_PREFIX, '-c', `core.hooksPath=${HOOKS_DEVNULL}`]
+    : [...GIT_GLOBAL_PREFIX];
+  return [...prefix, ...args];
+}
 
 /**
  * Setzt eine sichere Default-Umgebung zusammen.
@@ -152,7 +171,7 @@ export async function runGit(
   options: GitCommandOptions,
 ): Promise<GitCommandResult> {
   const logger = options.logger ?? getDefaultLogger();
-  const fullArgs = [...GIT_GLOBAL_PREFIX, ...args];
+  const fullArgs = buildArgs(args, options.skipHooks ?? false);
   const startedAt = Date.now();
 
   // ── Dry-Run-Pfad ─────────────────────────────────────────────
