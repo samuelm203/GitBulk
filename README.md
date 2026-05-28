@@ -2,7 +2,7 @@
 
 > Configurable CLI tool for bulk operations on Git repositories.
 
-GitBulk allows you to perform defined Git operations (cloning, pulling, branching, code changes, commit & push) across many repositories in a configuration-driven way — robust, parallel, and traceable.
+GitBulk allows you to perform defined Git operations (cloning, pulling, branching, code changes, commit and push) across many repositories in a configuration-driven way — robust, parallel, and traceable.
 
 ## Status
 
