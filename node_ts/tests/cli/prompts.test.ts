@@ -19,10 +19,6 @@ import {
   validateTicket,
   validateMessage,
 } from '../../src/utils/validators.js';
-
-/**
- * Erstellt einen Mock für das readline-Interface.
- */
 function createMockReadline(answers: string[]): {
   rl: Partial<Interface> & { answerIndex: number };
   reset: () => void;
@@ -53,9 +49,9 @@ function createMockReadline(answers: string[]): {
 }
 
 /**
- * Helfer: Mockt stdout/stderr für die Testausführung.
+ * Helfer: Mockt stdout/stderr für die Testausführung (jetzt async-fähig).
  */
-function captureLogs(fn: () => void): { stdout: string; stderr: string } {
+async function captureLogs(fn: () => Promise<void> | void): Promise<{ stdout: string; stderr: string }> {
   const origStdout = process.stdout.write;
   const origStderr = process.stderr.write;
 
@@ -73,13 +69,16 @@ function captureLogs(fn: () => void): { stdout: string; stderr: string } {
   }) as any;
 
   try {
-    fn();
+    await fn();
   } finally {
     process.stdout.write = origStdout;
     process.stderr.write = origStderr;
   }
 
-  return { stdout, stderr };
+  const stripAnsi = (str: string) =>
+    str.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '');
+
+  return { stdout: stripAnsi(stdout), stderr: stripAnsi(stderr) };
 }
 
 describe('cli/prompts.ts', () => {
@@ -95,39 +94,35 @@ describe('cli/prompts.ts', () => {
     it('retries on invalid input and succeeds', async () => {
       const { rl } = createMockReadline(['', 'repo-a']); // Leere RU-Liste wird abgelehnt
 
-      const logs = captureLogs(() => {
-        /* empty */
+      let result;
+      const logs = await captureLogs(async () => {
+        result = await promptUntilValid(rl as Interface, 'Enter RUs:', validateRuList);
       });
 
-      const result = await promptUntilValid(rl as Interface, 'Enter RUs:', validateRuList);
-
       assert.deepEqual(result, ['repo-a']);
+      assert.match(logs.stderr, /Error/);
     });
 
     it('writes error to stderr on validation failure', async () => {
       const { rl } = createMockReadline(['', 'valid-ticket']);
 
-      let stderrOutput = '';
-      const origStderr = process.stderr.write;
-      process.stderr.write = ((chunk: any) => {
-        stderrOutput += typeof chunk === 'string' ? chunk : chunk.toString();
-        return true;
-      }) as any;
-
-      try {
+      const logs = await captureLogs(async () => {
         await promptUntilValid(rl as Interface, 'Ticket:', validateTicket);
-        assert.match(stderrOutput, /Error/);
-      } finally {
-        process.stderr.write = origStderr;
-      }
+      });
+
+      assert.match(logs.stderr, /Error/);
     });
 
     it('handles multiple retries', async () => {
       const { rl } = createMockReadline(['', ' ', '   ', 'valid-msg']);
 
-      const result = await promptUntilValid(rl as Interface, 'Message:', validateMessage);
+      let result;
+      const logs = await captureLogs(async () => {
+        result = await promptUntilValid(rl as Interface, 'Message:', validateMessage);
+      });
 
       assert.equal(result, 'valid-msg');
+      assert.match(logs.stderr, /Error/);
     });
 
     it('accepts Y/N boolean validation', async () => {
@@ -145,8 +140,13 @@ describe('cli/prompts.ts', () => {
     it('rejects invalid Y/N and retries', async () => {
       const { rl } = createMockReadline(['maybe', 'nope', 'y']);
 
-      const result = await promptUntilValid(rl as Interface, 'Accept?', validateYesNo);
+      let result;
+      const logs = await captureLogs(async () => {
+        result = await promptUntilValid(rl as Interface, 'Accept?', validateYesNo);
+      });
+
       assert.equal(result, true);
+      assert.match(logs.stderr, /Error/);
     });
   });
 
@@ -164,23 +164,16 @@ describe('cli/prompts.ts', () => {
 
       const { rl } = createMockReadline(['Y']);
 
-      let stdoutOutput = '';
-      const origStdout = process.stdout.write;
-      process.stdout.write = ((chunk: any) => {
-        stdoutOutput += typeof chunk === 'string' ? chunk : chunk.toString();
-        return true;
-      }) as any;
+      let confirmed;
+      const logs = await captureLogs(async () => {
+        confirmed = await confirmConfig(rl as Interface, config);
+      });
 
-      try {
-        const confirmed = await confirmConfig(rl as Interface, config);
-        assert.equal(confirmed, true);
-        assert.match(stdoutOutput, /Configuration Summary/);
-        assert.match(stdoutOutput, /repo-a, repo-b/);
-        assert.match(stdoutOutput, /AKB-1234/);
-        assert.match(stdoutOutput, /feature-xyz/);
-      } finally {
-        process.stdout.write = origStdout;
-      }
+      assert.equal(confirmed, true);
+      assert.match(logs.stdout, /Configuration Summary/);
+      assert.match(logs.stdout, /repo-a, repo-b/);
+      assert.match(logs.stdout, /AKB-1234/);
+      assert.match(logs.stdout, /feature-xyz/);
     });
 
     it('returns false when user rejects confirmation', async () => {
@@ -196,15 +189,12 @@ describe('cli/prompts.ts', () => {
 
       const { rl } = createMockReadline(['N']);
 
-      const origStdout = process.stdout.write;
-      process.stdout.write = (() => true) as any;
+      let confirmed;
+      await captureLogs(async () => {
+        confirmed = await confirmConfig(rl as Interface, config);
+      });
 
-      try {
-        const confirmed = await confirmConfig(rl as Interface, config);
-        assert.equal(confirmed, false);
-      } finally {
-        process.stdout.write = origStdout;
-      }
+      assert.equal(confirmed, false);
     });
 
     it('shows PR on error status correctly', async () => {
@@ -220,19 +210,11 @@ describe('cli/prompts.ts', () => {
 
       const { rl } = createMockReadline(['Y']);
 
-      let stdoutOutput = '';
-      const origStdout = process.stdout.write;
-      process.stdout.write = ((chunk: any) => {
-        stdoutOutput += typeof chunk === 'string' ? chunk : chunk.toString();
-        return true;
-      }) as any;
-
-      try {
+      const logs = await captureLogs(async () => {
         await confirmConfig(rl as Interface, config);
-        assert.match(stdoutOutput, /PR on error:\s+No/);
-      } finally {
-        process.stdout.write = origStdout;
-      }
+      });
+
+      assert.match(logs.stdout, /PR on error:\s+No/);
     });
 
     it('shows PR on error as Yes when true', async () => {
@@ -248,19 +230,11 @@ describe('cli/prompts.ts', () => {
 
       const { rl } = createMockReadline(['Y']);
 
-      let stdoutOutput = '';
-      const origStdout = process.stdout.write;
-      process.stdout.write = ((chunk: any) => {
-        stdoutOutput += typeof chunk === 'string' ? chunk : chunk.toString();
-        return true;
-      }) as any;
-
-      try {
+      const logs = await captureLogs(async () => {
         await confirmConfig(rl as Interface, config);
-        assert.match(stdoutOutput, /PR on error:\s+Yes/);
-      } finally {
-        process.stdout.write = origStdout;
-      }
+      });
+
+      assert.match(logs.stdout, /PR on error:\s+Yes/);
     });
 
     it('rejects invalid Y/N and retries', async () => {
@@ -276,15 +250,13 @@ describe('cli/prompts.ts', () => {
 
       const { rl } = createMockReadline(['invalid', 'maybe', 'n']);
 
-      const origStdout = process.stdout.write;
-      process.stdout.write = (() => true) as any;
+      let confirmed;
+      const logs = await captureLogs(async () => {
+        confirmed = await confirmConfig(rl as Interface, config);
+      });
 
-      try {
-        const confirmed = await confirmConfig(rl as Interface, config);
-        assert.equal(confirmed, false);
-      } finally {
-        process.stdout.write = origStdout;
-      }
+      assert.equal(confirmed, false);
+      assert.match(logs.stderr, /Error/);
     });
 
     it('handles multiple RUs in configuration summary', async () => {
@@ -300,21 +272,14 @@ describe('cli/prompts.ts', () => {
 
       const { rl } = createMockReadline(['YES']);
 
-      let stdoutOutput = '';
-      const origStdout = process.stdout.write;
-      process.stdout.write = ((chunk: any) => {
-        stdoutOutput += typeof chunk === 'string' ? chunk : chunk.toString();
-        return true;
-      }) as any;
+      let confirmed;
+      const logs = await captureLogs(async () => {
+        confirmed = await confirmConfig(rl as Interface, config);
+      });
 
-      try {
-        const confirmed = await confirmConfig(rl as Interface, config);
-        assert.equal(confirmed, true);
-        assert.match(stdoutOutput, /repo-a, repo-b, repo-c/);
-        assert.match(stdoutOutput, /ABC-999/);
-      } finally {
-        process.stdout.write = origStdout;
-      }
+      assert.equal(confirmed, true);
+      assert.match(logs.stdout, /repo-a, repo-b, repo-c/);
+      assert.match(logs.stdout, /ABC-999/);
     });
   });
 });
