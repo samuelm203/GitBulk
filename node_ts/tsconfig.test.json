@@ -1,0 +1,21 @@
+{
+  // Typecheck-Konfiguration, die AUCH die Tests prüft.
+  //
+  // Die Haupt-tsconfig.json schließt `tests` aus (rootDir: ./src, für den
+  // sauberen Build). Damit Typfehler in Tests aber nicht unbemerkt bleiben,
+  // prüft diese Config src + tests zusammen — ohne Output zu erzeugen.
+  //
+  // Genutzt via `npm run typecheck:tests` und in der CI.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    // rootDir aufheben: Tests liegen außerhalb von ./src.
+    "rootDir": ".",
+    // outDir wird durch noEmit irrelevant, aber wir setzen es neutral.
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false
+  },
+  "include": ["src/**/*.ts", "src/**/*.js", "tests/**/*.ts"],
+  "exclude": ["node_modules", "dist", "examples"]
+}

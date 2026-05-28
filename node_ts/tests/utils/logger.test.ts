@@ -5,7 +5,7 @@
  * damit wir Log-Output verifizieren können, ohne die Test-Ausgabe zu spammen.
  */
 
-import { describe, it, beforeEach, afterEach } from 'node:test';
+import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { createLogger, LOG_LEVELS } from '../../src/utils/logger.js';

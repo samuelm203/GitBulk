@@ -6,7 +6,7 @@ GitBulk allows you to perform defined Git operations (cloning, pulling, branchin
 
 ## Status
 
-🚧 **In Development** — Currently building the core framework.
+**In Development** — Currently building the core framework.
 
 ## Requirements
 

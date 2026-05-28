@@ -1,0 +1,90 @@
+# GitHub Actions CI-Workflow für GitBulk.
+#
+# Läuft bei jedem Push auf main/master und bei jedem Pull Request.
+# Testet auf Windows, Linux und macOS mit mehreren Node-Versionen.
+#
+# WICHTIG: Diese Datei MUSS im Repo-Root unter .github/workflows/ liegen,
+# NICHT im node_ts/-Unterordner. GitHub Actions sucht Workflows nur dort.
+# Alle Build-/Test-Befehle laufen aber im node_ts/-Ordner (siehe
+# `defaults.run.working-directory`).
+
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  # Erlaubt manuelles Auslösen über die GitHub-UI ("Run workflow").
+  workflow_dispatch:
+
+# Bricht laufende Runs ab, wenn ein neuer Push auf denselben Branch/PR kommt.
+# Spart CI-Minuten und gibt schnelleres Feedback.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test (${{ matrix.os }}, Node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      # Ein fehlgeschlagener Job soll die anderen NICHT abbrechen — wir wollen
+      # sehen, ob ein Problem plattform- oder versionsspezifisch ist.
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        # Node 20 = aktuelle LTS-Minimalanforderung (engines.node >= 20),
+        # Node 22 = aktuelle LTS. So fangen wir Versions-Unterschiede ab.
+        node: [20, 22]
+
+    # Alle `run`-Schritte laufen im node_ts/-Unterordner.
+    defaults:
+      run:
+        working-directory: node_ts
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          # Cache für npm — beschleunigt Installs. Pfad zeigt auf das
+          # Lockfile im node_ts/-Ordner.
+          cache: npm
+          cache-dependency-path: node_ts/package-lock.json
+
+      # Git-Identität für die CI setzen: Die Tests erstellen echte Commits in
+      # temporären Repos. Auf frischen CI-Runnern sind user.name/email nicht
+      # gesetzt, was `git commit` fehlschlagen ließe. Die Test-Fixtures setzen
+      # die Identität zwar lokal pro Repo, aber ein globaler Fallback schadet
+      # nicht. `init.defaultBranch` unterdrückt zudem die Git-Hinweismeldung
+      # bei `git init` und sorgt für konsistentes Verhalten über alle Runner.
+      - name: Configure Git
+        shell: bash
+        run: |
+          git config --global user.email "ci@example.com"
+          git config --global user.name "CI Runner"
+          git config --global init.defaultBranch master
+        working-directory: ${{ github.workspace }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Typecheck tests
+        run: npm run typecheck:tests
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm test

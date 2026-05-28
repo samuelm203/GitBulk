@@ -25,13 +25,17 @@ function createMockReadline(answers: string[]): {
 } {
   let answerIndex = 0;
 
-  const rl: any = {
+  const rl: Partial<Interface> & { answerIndex: number } = {
     answerIndex: 0,
     question: async (prompt: string) => {
       if (answerIndex >= answers.length) {
         throw new Error(`No answer provided for prompt: "${prompt}"`);
       }
       const answer = answers[answerIndex++];
+      // Defensiver Check: stellt den string-Typ sicher (noUncheckedIndexedAccess).
+      if (answer === undefined) {
+        throw new Error(`No answer provided for prompt: "${prompt}"`);
+      }
       return answer;
     },
     close: () => {
@@ -58,15 +62,15 @@ async function captureLogs(fn: () => Promise<void> | void): Promise<{ stdout: st
   let stdout = '';
   let stderr = '';
 
-  process.stdout.write = ((chunk: any) => {
+  process.stdout.write = ((chunk: string | Uint8Array) => {
     stdout += typeof chunk === 'string' ? chunk : chunk.toString();
     return true;
-  }) as any;
+  }) as typeof process.stdout.write;
 
-  process.stderr.write = ((chunk: any) => {
+  process.stderr.write = ((chunk: string | Uint8Array) => {
     stderr += typeof chunk === 'string' ? chunk : chunk.toString();
     return true;
-  }) as any;
+  }) as typeof process.stderr.write;
 
   try {
     await fn();
@@ -76,6 +80,8 @@ async function captureLogs(fn: () => Promise<void> | void): Promise<{ stdout: st
   }
 
   const stripAnsi = (str: string) =>
+    // ANSI-Escape-Sequenzen enthalten per Definition Control-Characters (\u001b).
+    // eslint-disable-next-line no-control-regex
     str.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '');
 
   return { stdout: stripAnsi(stdout), stderr: stripAnsi(stderr) };

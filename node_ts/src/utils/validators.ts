@@ -49,7 +49,7 @@ export function validateRuList(input: string | readonly string[]): ValidationRes
  * Verboten u. a.: führende/schließende `/`, `..`, Leerzeichen, `~^:?*[\`
  * Maximale Länge: 255 Zeichen (Konvention).
  */
-const BRANCH_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._\-/]*[A-Za-z0-9_\-]$|^[A-Za-z0-9]$/;
+const BRANCH_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._/-]*[A-Za-z0-9_-]$|^[A-Za-z0-9]$/;
 const BRANCH_FORBIDDEN_SEQUENCES = ['..', '@{', '//', '.lock'];
 
 /**
