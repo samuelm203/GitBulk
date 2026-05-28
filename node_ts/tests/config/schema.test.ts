@@ -6,7 +6,7 @@
  */
 
 import { describe, it, before, after } from 'node:test';
-import assert from 'node:assert/strict';
+import * as assert from 'node:assert/strict';
 import { writeFileSync, unlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';

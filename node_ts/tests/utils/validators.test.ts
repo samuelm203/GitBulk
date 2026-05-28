@@ -5,7 +5,7 @@
  */
 
 import { describe, it, before, after } from 'node:test';
-import assert from 'node:assert/strict';
+import * as assert from 'node:assert/strict';
 import { writeFileSync, rmSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -42,7 +42,9 @@ describe('validateRuList', () => {
   it('rejects empty string', () => {
     const r = validateRuList('');
     assert.equal(r.ok, false);
-    if (!r.ok) assert.match(r.error, /RU list is missing/);
+    if (!r.ok) {
+      assert.match(r.error, /RU list is missing/);
+    }
   });
 
   it('rejects empty array', () => {
@@ -215,7 +217,9 @@ describe('validateMessage', () => {
   it('rejects whitespace-only', () => {
     const r = validateMessage('   \t\n   ');
     assert.equal(r.ok, false);
-    if (!r.ok) assert.match(r.error, /empty/i);
+    if (!r.ok) {
+      assert.match(r.error, /empty/i);
+    }
   });
 
   it('rejects empty', () => {

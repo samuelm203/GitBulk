@@ -9,8 +9,8 @@
  */
 
 import { describe, it, before, after } from 'node:test';
-import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, rmSync, mkdirSync, chmodSync } from 'node:fs';
+import * as assert from 'node:assert/strict';
+import { mkdtempSync, writeFileSync, rmSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 

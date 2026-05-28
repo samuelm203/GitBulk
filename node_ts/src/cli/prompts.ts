@@ -58,7 +58,7 @@ export interface InteractiveInputResult {
  * @param validator - Validierungsfunktion (entspricht der Diamant-Raute)
  * @returns Validierter Wert
  */
-async function promptUntilValid<T>(
+export async function promptUntilValid<T>(
   rl: Interface,
   promptText: string,
   validator: (raw: string) => ValidationResult<T>,
@@ -86,7 +86,7 @@ async function promptUntilValid<T>(
  *
  * @returns `true` wenn der User die Config bestätigt, `false` für Neustart
  */
-async function confirmConfig(rl: Interface, config: InteractiveInputResult): Promise<boolean> {
+export async function confirmConfig(rl: Interface, config: InteractiveInputResult): Promise<boolean> {
   output.write('\n');
   output.write(chalk.bold('━━━ Configuration Summary ━━━\n'));
   output.write(`  ${chalk.gray('RUs:')}             ${config.rus.join(', ')}\n`);
