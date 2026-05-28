@@ -8,6 +8,7 @@ import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, writeFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 
 import {
   runGit,
@@ -15,7 +16,7 @@ import {
   detectGit,
   GitExecutorError,
 } from '../../src/git/executor.js';
-import { createWorkspace, cleanup, setupRu, writeShellScript } from '../helpers/git-fixtures.js';
+import { createWorkspace, cleanup, setupRu, writeHangingNodeScript } from '../helpers/git-fixtures.js';
 
 let workspace: string;
 let ruPath: string;
@@ -79,10 +80,13 @@ describe('runGit', () => {
   });
 
   it('kills hanging process on timeout', async () => {
-    const hangScript = writeShellScript(workspace, 'sleep 30');
+    // Plattformneutral: Node als "hängender Editor" (wartet 30s).
+    // So braucht der Test kein sh und läuft auch auf Windows.
+    const hangScript = writeHangingNodeScript(workspace);
+    const editorCmd = `"${process.execPath}" "${hangScript}"`;
     const start = Date.now();
     const r = await runGit(
-      ['-c', `core.editor=sh ${hangScript}`, 'commit', '--allow-empty'],
+      ['-c', `core.editor=${editorCmd}`, 'commit', '--allow-empty'],
       { cwd: ruPath, timeoutMs: 500 },
     );
     const elapsed = Date.now() - start;
@@ -91,12 +95,13 @@ describe('runGit', () => {
   });
 
   it('cancels on AbortSignal', async () => {
-    const hangScript = writeShellScript(workspace, 'sleep 30');
+    const hangScript = writeHangingNodeScript(workspace);
+    const editorCmd = `"${process.execPath}" "${hangScript}"`;
     const controller = new AbortController();
     setTimeout(() => controller.abort(), 100);
     const start = Date.now();
     const r = await runGit(
-      ['-c', `core.editor=sh ${hangScript}`, 'commit', '--allow-empty'],
+      ['-c', `core.editor=${editorCmd}`, 'commit', '--allow-empty'],
       { cwd: ruPath, timeoutMs: 30_000, signal: controller.signal },
     );
     const elapsed = Date.now() - start;
@@ -105,7 +110,7 @@ describe('runGit', () => {
   });
 
   it('does not execute shell injection in args', async () => {
-    const marker = '/tmp/GITBULK_INJ_TEST_MARKER';
+    const marker = join(tmpdir(), 'GITBULK_INJ_TEST_MARKER');
     if (existsSync(marker)) rmSync(marker);
     await runGit(['commit', '-m', `"; touch ${marker} #`], { cwd: ruPath, timeoutMs: 5000 });
     assert.equal(existsSync(marker), false, 'shell injection must not work');

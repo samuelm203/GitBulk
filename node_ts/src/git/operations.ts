@@ -15,8 +15,8 @@
  */
 
 import { existsSync, statSync } from 'node:fs';
-import { join } from 'node:path';
-import { spawn } from 'node:child_process';
+import { join, extname } from 'node:path';
+import { spawn, spawnSync } from 'node:child_process';
 
 import { runGit, runGitChecked, type GitCommandResult } from './executor.js';
 import type { Logger } from '../utils/logger.js';
@@ -248,6 +248,147 @@ export async function createFeatureBranch(
 // ──────────────────────────────────────────────────────────────────
 
 /**
+ * Sucht auf Windows nach dem von Git for Windows mitgelieferten `sh.exe`.
+ *
+ * Hintergrund: Git for Windows installiert `sh.exe` unter
+ * `<GitInstallDir>\usr\bin\sh.exe` oder `<GitInstallDir>\bin\sh.exe`,
+ * legt es aber NICHT zwingend in den globalen PATH. Da GitBulk ohnehin
+ * Git voraussetzt, können wir `sh.exe` relativ zur Git-Installation finden.
+ *
+ * Strategie:
+ *   1. Wenn `sh` im PATH ist → einfach `'sh'` zurückgeben (kein Discovery nötig).
+ *   2. Sonst: `git --exec-path` liefert z. B.
+ *      `C:\Program Files\Git\mingw64\libexec\git-core`. Von dort aus ist
+ *      `sh.exe` unter `<GitRoot>\usr\bin\sh.exe` erreichbar.
+ *   3. Fallback: typische Installationspfade durchprobieren.
+ *
+ * @returns Absoluter Pfad zu `sh.exe`, oder `'sh'` als Fallback (PATH).
+ */
+function findShellOnWindows(): string {
+  // 1. Ist sh bereits im PATH? (z. B. WSL, Cygwin, oder PATH enthält Git\usr\bin)
+  const inPath = spawnSyncSafe('where', ['sh']);
+  if (inPath) {
+    const firstLine = inPath.split(/\r?\n/).find((l) => l.trim().length > 0);
+    if (firstLine) return firstLine.trim();
+  }
+
+  // 2. Git-Installationsverzeichnis über `git --exec-path` ermitteln.
+  const execPath = spawnSyncSafe('git', ['--exec-path']);
+  if (execPath) {
+    // Normalisiere auf Backslashes (Git kann je nach Version / oder \ liefern).
+    const trimmed = execPath.trim().replace(/\//g, '\\');
+    // execPath ist z. B. C:\Program Files\Git\mingw64\libexec\git-core
+    // Wir suchen den Git-Root, indem wir vor dem 'mingw'-Segment abschneiden.
+    const idx = trimmed.toLowerCase().indexOf('\\mingw');
+    if (idx > 0) {
+      const gitRoot = trimmed.slice(0, idx);
+      const candidate = join(gitRoot, 'usr', 'bin', 'sh.exe');
+      if (existsSync(candidate)) return candidate;
+    }
+  }
+
+  // 3. Typische Installationspfade als letzter Versuch.
+  const guesses = [
+    'C:\\Program Files\\Git\\usr\\bin\\sh.exe',
+    'C:\\Program Files\\Git\\bin\\sh.exe',
+    'C:\\Program Files (x86)\\Git\\usr\\bin\\sh.exe',
+    'C:\\Program Files (x86)\\Git\\bin\\sh.exe',
+  ];
+  for (const g of guesses) {
+    if (existsSync(g)) return g;
+  }
+
+  // Aufgeben → 'sh' (führt zu klarer Fehlermeldung, falls nicht vorhanden).
+  return 'sh';
+}
+
+/**
+ * Führt einen Befehl synchron aus und gibt stdout zurück, oder `null` bei Fehler.
+ * Klein gehalten für die Interpreter-Discovery (kein Streaming nötig).
+ */
+function spawnSyncSafe(command: string, args: string[]): string | null {
+  try {
+    const result = spawnSync(command, args, {
+      encoding: 'utf8',
+      timeout: 5000,
+      windowsHide: true,
+      shell: false,
+    });
+    if (result.status === 0 && typeof result.stdout === 'string') {
+      return result.stdout;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Cache für den ermittelten Windows-Shell-Pfad (Discovery ist teuer).
+ */
+let cachedWindowsShell: string | null = null;
+
+/**
+ * Wählt den passenden Interpreter, um ein Skript plattformübergreifend
+ * auszuführen.
+ *
+ * Hintergrund: Auf POSIX (Linux/macOS) wird ein ausführbares Skript per
+ * Shebang (`#!/bin/sh`) interpretiert und kann direkt gespawnt werden.
+ * Windows kennt KEINE Shebangs — `spawn('script.sh')` schlägt dort mit
+ * `ENOENT`/`EFTYPE` fehl. Wir müssen den Interpreter daher explizit wählen:
+ *
+ *   - `.sh`            → über `sh` ausführen. Auf Windows wird Git's
+ *                        mitgeliefertes `sh.exe` gesucht (siehe
+ *                        `findShellOnWindows`), da Git ohnehin vorausgesetzt ist.
+ *   - `.bat` / `.cmd`  → über `cmd.exe /c` (nur Windows sinnvoll).
+ *   - `.ps1`           → über `powershell -File` (Windows) bzw. `pwsh` (POSIX).
+ *   - `.js` / `.mjs`   → über `process.execPath` (Node selbst).
+ *   - sonst            → direkt ausführen und auf Shebang/Datei-Assoziation
+ *                        vertrauen (POSIX-Skripte ohne Endung etc.).
+ *
+ * Rückgabe: `{ command, prefixArgs }`. Der eigentliche Aufruf ist dann
+ * `spawn(command, [...prefixArgs, scriptPath], ...)`.
+ */
+export function resolveInterpreter(scriptPath: string): {
+  command: string;
+  prefixArgs: string[];
+} {
+  const ext = extname(scriptPath).toLowerCase();
+  const isWindows = process.platform === 'win32';
+
+  switch (ext) {
+    case '.sh':
+    case '.bash': {
+      if (isWindows) {
+        // Git's sh.exe finden (mit Cache, da Discovery I/O kostet).
+        if (cachedWindowsShell === null) {
+          cachedWindowsShell = findShellOnWindows();
+        }
+        return { command: cachedWindowsShell, prefixArgs: [] };
+      }
+      // POSIX: sh bzw. bash direkt.
+      return { command: ext === '.bash' ? 'bash' : 'sh', prefixArgs: [] };
+    }
+    case '.bat':
+    case '.cmd':
+      // Batch-Dateien laufen nur über cmd.exe.
+      return { command: 'cmd.exe', prefixArgs: ['/c'] };
+    case '.ps1':
+      return isWindows
+        ? { command: 'powershell.exe', prefixArgs: ['-NoProfile', '-File'] }
+        : { command: 'pwsh', prefixArgs: ['-NoProfile', '-File'] };
+    case '.js':
+    case '.mjs':
+    case '.cjs':
+      return { command: process.execPath, prefixArgs: [] };
+    default:
+      // Ohne bekannte Endung: direkt ausführen (POSIX-Shebang) — auf Windows
+      // wird das fehlschlagen, aber dann ist das ein bewusstes User-Setup.
+      return { command: scriptPath, prefixArgs: ['__SELF__'] };
+  }
+}
+
+/**
  * Führt das benutzerdefinierte Code-Change-Skript aus.
  * Flowchart: `[Code_Change] execute` → `Exit-Code == 0?`
  *
@@ -258,6 +399,10 @@ export async function createFeatureBranch(
  *   - `GITBULK_TICKET`        — Ticket-Identifier
  *   - `GITBULK_BRANCH`        — Voll-qualifizierter Feature-Branch-Name
  *   - `GITBULK_SOURCE_BRANCH` — Quell-Branch (z. B. master)
+ *
+ * Plattformübergreifend: Skripte werden über den passenden Interpreter
+ * gestartet (siehe `resolveInterpreter`), sodass `.sh` auch auf Windows
+ * funktioniert (sofern `sh` via Git-for-Windows/WSL verfügbar ist).
  *
  * Wird NICHT via `runGit` ausgeführt, weil es kein Git-Befehl ist.
  *
@@ -294,7 +439,14 @@ export async function executeCodeChange(
     let timedOut = false;
     let settled = false;
 
-    const child = spawn(scriptPath, [], {
+    // Plattformübergreifenden Interpreter wählen (Windows kennt keine Shebangs).
+    const { command, prefixArgs } = resolveInterpreter(scriptPath);
+    // Sonderfall "__SELF__": Skript direkt ausführen (command IST der scriptPath,
+    // keine zusätzlichen Argumente). Sonst: command + prefixArgs + scriptPath.
+    const isSelfExec = prefixArgs[0] === '__SELF__';
+    const spawnArgs = isSelfExec ? [] : [...prefixArgs, scriptPath];
+
+    const child = spawn(command, spawnArgs, {
       cwd: base.cwd,
       env: {
         ...process.env,

@@ -92,7 +92,7 @@ describe('GitBulkConfigSchema', () => {
 
   it('rejects non-existent script file', () => {
     const result = GitBulkConfigSchema.safeParse(
-      validConfig({ script: '/tmp/does-not-exist-xyz.sh' }),
+      validConfig({ script: join(tmpdir(), 'does-not-exist-xyz.sh') }),
     );
     assert.equal(result.success, false);
   });

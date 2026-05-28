@@ -89,7 +89,7 @@ function resolveRepoPath(workspaceDir: string | undefined, ru: string): string {
  * @returns `Phase3Result` mit `prStatus` für Phase 4
  */
 export async function runPhase3(ru: string, config: GitBulkConfig): Promise<Phase3Result> {
-  const logger = getDefaultLogger().withRu(ru);
+  const logger = (config.dryRun ? getDefaultLogger() : getDefaultLogger()).withRu(ru);
   const repoPath = resolveRepoPath(config.workspaceDir, ru);
   const featureBranch = buildFeatureBranchName(config.ticket, config.branch);
 
@@ -236,16 +236,29 @@ export async function runPhase3(ru: string, config: GitBulkConfig): Promise<Phas
   }
 
   // ── 3.4 Code-Change ausführen ──────────────────────────────────
-  const codeChange = await executeCodeChange(
-    config.script,
-    {
-      ru,
-      ticket: config.ticket,
-      branch: featureBranch,
-      sourceBranch: config.sourceBranch,
-    },
-    base,
-  );
+  let codeChange: { exitCode: number | null; stdout: string; stderr: string; timedOut: boolean };
+  try {
+    codeChange = await executeCodeChange(
+      config.script,
+      {
+        ru,
+        ticket: config.ticket,
+        branch: featureBranch,
+        sourceBranch: config.sourceBranch,
+      },
+      base,
+    );
+  } catch (err) {
+    // Skript konnte nicht gestartet werden (z. B. Interpreter fehlt auf Windows).
+    // Das ist ein fataler Fehler für diesen RU, darf aber den Bulk-Lauf nicht
+    // crashen. Wir behandeln es wie einen fehlgeschlagenen Code-Change ohne Diff.
+    const msg = `Code change script could not be executed: ${(err as Error).message}`;
+    logger.error(msg);
+    result.fatalError = msg;
+    await performCleanup();
+    await deleteLocalBranchSafe(featureBranch, base, result, logger);
+    return result;
+  }
   const codeChangeOk = codeChange.exitCode === 0;
   logger.debug(`code change exit: ${codeChange.exitCode}, timedOut: ${codeChange.timedOut}`);
 

@@ -4,8 +4,11 @@
  * Validatoren sind reine Funktionen ohne Seiteneffekte → einfache Tests.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
+import { writeFileSync, rmSync, mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import {
   validateRuList,
@@ -150,21 +153,42 @@ describe('validateTicket', () => {
 });
 
 describe('validateFilePath', () => {
+  // Plattformunabhängige Fixtures: echte Temp-Datei + Temp-Verzeichnis,
+  // damit der Test auch auf Windows läuft (kein /etc/hostname, kein /tmp).
+  const tmpFile = join(tmpdir(), `gitbulk-vfp-${Date.now()}.txt`);
+  const tmpDir = mkdtempSync(join(tmpdir(), 'gitbulk-vfp-dir-'));
+
+  before(() => {
+    writeFileSync(tmpFile, 'content');
+  });
+
+  after(() => {
+    try {
+      rmSync(tmpFile, { force: true });
+    } catch {
+      /* ignore */
+    }
+    try {
+      rmSync(tmpDir, { recursive: true, force: true });
+    } catch {
+      /* ignore */
+    }
+  });
+
   it('resolves existing file to absolute path', () => {
-    // /etc/hostname existiert auf Linux-CI
-    const r = validateFilePath('/etc/hostname');
+    const r = validateFilePath(tmpFile);
     assert.equal(r.ok, true);
-    if (r.ok) assert.equal(r.value, '/etc/hostname');
+    if (r.ok) assert.equal(r.value, tmpFile);
   });
 
   it('rejects non-existent file', () => {
-    const r = validateFilePath('/tmp/does-not-exist-xyz-12345.txt');
+    const r = validateFilePath(join(tmpdir(), 'does-not-exist-xyz-12345.txt'));
     assert.equal(r.ok, false);
     if (!r.ok) assert.match(r.error, /File not found/);
   });
 
   it('rejects directory', () => {
-    const r = validateFilePath('/tmp');
+    const r = validateFilePath(tmpDir);
     assert.equal(r.ok, false);
     if (!r.ok) assert.match(r.error, /not a file/);
   });

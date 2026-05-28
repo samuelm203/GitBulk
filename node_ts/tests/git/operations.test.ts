@@ -8,6 +8,7 @@ import { describe, it, before, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { writeFileSync, existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 
 import {
   isGitRepository,
@@ -26,6 +27,7 @@ import {
   checkoutBranch,
   stashPop,
   deleteLocalBranch,
+  resolveInterpreter,
   type BaseGitOptions,
 } from '../../src/git/operations.js';
 import { runGitChecked } from '../../src/git/executor.js';
@@ -65,11 +67,12 @@ describe('isGitRepository', () => {
   });
 
   it('returns false for non-existent path', () => {
-    assert.equal(isGitRepository('/tmp/does-not-exist-xyz'), false);
+    assert.equal(isGitRepository(join(tmpdir(), 'does-not-exist-xyz-gitbulk')), false);
   });
 
   it('returns false for non-repo directory', () => {
-    assert.equal(isGitRepository('/tmp'), false);
+    // tmpdir() selbst ist kein Git-Repo
+    assert.equal(isGitRepository(tmpdir()), false);
   });
 });
 
@@ -257,5 +260,52 @@ describe('executeCodeChange', () => {
     // In our design, the script DID run (the marker exists).
     assert.equal(existsSync(marker), true);
     rmSync(marker);
+  });
+});
+
+describe('resolveInterpreter', () => {
+  it('chooses sh for .sh scripts', () => {
+    const { command, prefixArgs } = resolveInterpreter('/path/to/script.sh');
+    assert.equal(command, 'sh');
+    assert.deepEqual(prefixArgs, []);
+  });
+
+  it('chooses bash for .bash scripts', () => {
+    const { command } = resolveInterpreter('/path/to/script.bash');
+    assert.equal(command, 'bash');
+  });
+
+  it('chooses cmd.exe for .bat and .cmd scripts', () => {
+    const bat = resolveInterpreter('C:\\scripts\\run.bat');
+    assert.equal(bat.command, 'cmd.exe');
+    assert.deepEqual(bat.prefixArgs, ['/c']);
+
+    const cmd = resolveInterpreter('C:\\scripts\\run.cmd');
+    assert.equal(cmd.command, 'cmd.exe');
+  });
+
+  it('chooses powershell for .ps1 scripts', () => {
+    const { command, prefixArgs } = resolveInterpreter('script.ps1');
+    // Platform-dependent: powershell.exe on Windows, pwsh elsewhere
+    assert.match(command, /powershell\.exe|pwsh/);
+    assert.ok(prefixArgs.includes('-File'));
+  });
+
+  it('uses node executable for .js/.mjs/.cjs scripts', () => {
+    for (const ext of ['.js', '.mjs', '.cjs']) {
+      const { command } = resolveInterpreter(`script${ext}`);
+      assert.equal(command, process.execPath);
+    }
+  });
+
+  it('marks unknown extensions for direct execution', () => {
+    const { command, prefixArgs } = resolveInterpreter('/usr/local/bin/mytool');
+    assert.equal(command, '/usr/local/bin/mytool');
+    assert.deepEqual(prefixArgs, ['__SELF__']);
+  });
+
+  it('is case-insensitive on the extension', () => {
+    assert.equal(resolveInterpreter('SCRIPT.SH').command, 'sh');
+    assert.equal(resolveInterpreter('Run.BAT').command, 'cmd.exe');
   });
 });

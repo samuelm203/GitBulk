@@ -94,3 +94,18 @@ export function writeShellScript(workspace: string, shellContent: string): strin
   writeFileSync(path, `#!/bin/sh\n${shellContent}\n`, { mode: 0o755 });
   return path;
 }
+
+/**
+ * Schreibt ein Node-Skript, das einfach lange schläft (30s).
+ *
+ * Plattformneutral nutzbar als "hängender Prozess" für Timeout-/Abort-Tests,
+ * da es über `process.execPath` (Node) läuft und kein `sh` benötigt.
+ *
+ * @returns Absoluter Pfad zum .mjs-Skript
+ */
+export function writeHangingNodeScript(workspace: string): string {
+  const path = join(workspace, `hang-${Math.random().toString(36).slice(2, 10)}.mjs`);
+  // setTimeout hält den Event-Loop 30s am Leben
+  writeFileSync(path, `setTimeout(() => {}, 30000);\n`);
+  return path;
+}

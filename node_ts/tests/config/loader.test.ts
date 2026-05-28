@@ -132,7 +132,7 @@ describe('loadConfig - JS', () => {
 
 describe('loadConfig - errors', () => {
   it('throws when path does not exist', async () => {
-    await assert.rejects(loadConfig({ path: '/tmp/no-such-file-xyz.yaml' }), /not found/i);
+    await assert.rejects(loadConfig({ path: join(tmpdir(), 'no-such-file-xyz.yaml') }), /not found/i);
   });
 
   it('rejects unsupported file extensions', async () => {
