@@ -23,11 +23,62 @@
  * Aufrufer entscheiden selbst, wie sie mit `result.exitCode != 0` umgehen.
  */
 
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 
 import type { Logger } from '../utils/logger.js';
 import { getDefaultLogger } from '../utils/logger.js';
+
+/**
+ * Beendet einen Prozess UND alle seine Kindprozesse plattformübergreifend.
+ *
+ * Hintergrund: `child.kill()` beendet auf allen Plattformen nur den direkten
+ * Kindprozess. Wenn dieser aber selbst Kinder gestartet hat (z. B. `git`
+ * startet einen Editor, Hook oder Credential-Helper), bleiben diese am Leben
+ * und halten u. U. die stdio-Pipes offen — das `close`-Event feuert dann nie
+ * und der Aufrufer hängt bis zum natürlichen Ende des Subprozesses.
+ *
+ * Lösungen pro Plattform:
+ *   - **Windows**: `taskkill /pid <pid> /T /F` beendet den gesamten Baum (`/T`)
+ *     zwangsweise (`/F`). Windows kennt keine POSIX-Signale, daher ist das
+ *     der einzige zuverlässige Weg.
+ *   - **POSIX**: Der Prozess wird mit `detached: true` als eigener
+ *     Prozessgruppen-Leader gestartet; `process.kill(-pid, signal)` sendet
+ *     das Signal an die GESAMTE Gruppe (negative PID).
+ *
+ * @param child  - Der zu beendende Kindprozess
+ * @param signal - POSIX-Signal (auf Windows ignoriert; dort immer Force-Kill)
+ */
+export function killProcessTree(child: ChildProcess, signal: NodeJS.Signals): void {
+  if (typeof child.pid !== 'number') return;
+
+  if (process.platform === 'win32') {
+    // taskkill killt den ganzen Baum zwangsweise. Synchron, damit der Kill
+    // garantiert abgesetzt ist, bevor wir weitermachen. Fehler ignorieren
+    // (Prozess kann schon beendet sein → taskkill liefert dann non-zero).
+    try {
+      spawnSync('taskkill', ['/pid', String(child.pid), '/T', '/F'], {
+        windowsHide: true,
+        timeout: 5000,
+      });
+    } catch {
+      /* Prozess bereits weg */
+    }
+    return;
+  }
+
+  // POSIX: Signal an die ganze Prozessgruppe (negative PID).
+  try {
+    process.kill(-child.pid, signal);
+  } catch {
+    // Fallback: nur den direkten Prozess, falls keine Gruppe existiert.
+    try {
+      child.kill(signal);
+    } catch {
+      /* bereits weg */
+    }
+  }
+}
 
 /**
  * Ergebnis einer Git-Befehls-Ausführung.
@@ -72,9 +123,8 @@ export interface GitCommandOptions {
    */
   dryRun?: boolean;
   /**
-   * Wenn `true`, werden Git-Hooks deaktiviert, indem `core.hooksPath` auf
-   * ein nicht existierendes Ziel umgebogen wird (`/dev/null` auf POSIX,
-   * `NUL` auf Windows). Entspricht `$config.skipHooks`.
+   * Wenn `true`, werden Git-Hooks via `core.hooksPath=/dev/null` deaktiviert.
+   * Entspricht `$config.skipHooks`.
    */
   skipHooks?: boolean;
   /**
@@ -108,30 +158,20 @@ export class GitExecutorError extends Error {
 }
 
 /**
- * Plattform-portabler Pfad, auf den `core.hooksPath` gesetzt wird, wenn
- * Hooks via `skipHooks` deaktiviert werden sollen. Beide Pfade existieren
- * NIE als reguläres Verzeichnis, sodass git keine Hooks findet.
- */
-const HOOKS_DEVNULL = process.platform === 'win32' ? 'NUL' : '/dev/null';
-
-/**
- * Standard-Argumente, die jedem Git-Aufruf vorangestellt werden.
+ * Baut die globalen Prefix-Argumente für einen Git-Aufruf zusammen.
  *
- * - Über `GIT_TERMINAL_PROMPT=0` (siehe `buildEnv`) wird verhindert,
- *   dass git interaktiv nach Credentials fragt → Timeout statt Hänger.
- * - Hooks werden dynamisch via `-c core.hooksPath=...` deaktiviert,
- *   wenn `options.skipHooks === true` ist (siehe `buildArgs`).
+ * - `skipHooks: true` → `-c core.hooksPath=/dev/null` voranstellen.
+ *   Deaktiviert ALLE Hooks (pre-commit, commit-msg, pre-push, ...).
+ *
+ * Über `GIT_TERMINAL_PROMPT=0` (siehe `buildEnv`) wird zusätzlich verhindert,
+ * dass git interaktiv nach Credentials fragt → Timeout statt Hänger.
  */
-const GIT_GLOBAL_PREFIX: readonly string[] = [];
-
-/**
- * Baut die finale Argument-Liste inklusive optionaler Hook-Deaktivierung.
- */
-function buildArgs(args: readonly string[], skipHooks: boolean): string[] {
-  const prefix = skipHooks
-    ? [...GIT_GLOBAL_PREFIX, '-c', `core.hooksPath=${HOOKS_DEVNULL}`]
-    : [...GIT_GLOBAL_PREFIX];
-  return [...prefix, ...args];
+function buildGlobalPrefix(options: GitCommandOptions): string[] {
+  const prefix: string[] = [];
+  if (options.skipHooks) {
+    prefix.push('-c', 'core.hooksPath=/dev/null');
+  }
+  return prefix;
 }
 
 /**
@@ -171,7 +211,7 @@ export async function runGit(
   options: GitCommandOptions,
 ): Promise<GitCommandResult> {
   const logger = options.logger ?? getDefaultLogger();
-  const fullArgs = buildArgs(args, options.skipHooks ?? false);
+  const fullArgs = [...buildGlobalPrefix(options), ...args];
   const startedAt = Date.now();
 
   // ── Dry-Run-Pfad ─────────────────────────────────────────────
@@ -214,20 +254,12 @@ export async function runGit(
     }
 
     /**
-     * Killt git und alle Kinder. Auf POSIX via negative PID → Prozessgruppe.
-     * Auf Windows via direktem child.kill().
+     * Killt git und alle Kinder plattformübergreifend (taskkill auf Windows,
+     * Prozessgruppen-Signal auf POSIX).
      */
     const killTree = (signal: NodeJS.Signals): void => {
       if (child.killed || settled) return;
-      try {
-        if (process.platform !== 'win32' && typeof child.pid === 'number') {
-          process.kill(-child.pid, signal);
-        } else {
-          child.kill(signal);
-        }
-      } catch {
-        // Prozess kann bereits beendet sein — ignorieren.
-      }
+      killProcessTree(child, signal);
     };
 
     let stdout = '';

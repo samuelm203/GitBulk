@@ -18,7 +18,7 @@ import { existsSync, statSync } from 'node:fs';
 import { join, extname } from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 
-import { runGit, runGitChecked, type GitCommandResult } from './executor.js';
+import { runGit, runGitChecked, killProcessTree, type GitCommandResult } from './executor.js';
 import type { Logger } from '../utils/logger.js';
 import { getDefaultLogger } from '../utils/logger.js';
 import {
@@ -463,15 +463,7 @@ export async function executeCodeChange(
 
     const killTree = (signal: NodeJS.Signals): void => {
       if (child.killed || settled) return;
-      try {
-        if (process.platform !== 'win32' && typeof child.pid === 'number') {
-          process.kill(-child.pid, signal);
-        } else {
-          child.kill(signal);
-        }
-      } catch {
-        /* prozess bereits weg */
-      }
+      killProcessTree(child, signal);
     };
 
     const onAbort = (): void => {

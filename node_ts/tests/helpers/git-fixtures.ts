@@ -109,3 +109,24 @@ export function writeHangingNodeScript(workspace: string): string {
   writeFileSync(path, `setTimeout(() => {}, 30000);\n`);
   return path;
 }
+
+/**
+ * Schreibt ein Node-Skript (.mjs), das den gegebenen JS-Body ausführt.
+ *
+ * Plattformneutral: läuft über `resolveInterpreter` → `process.execPath`,
+ * funktioniert also identisch auf Windows, Linux, macOS. Ideal für
+ * `executeCodeChange`-Tests, die sonst von `sh`/`sleep`/`touch` abhingen.
+ *
+ * Im Body verfügbar:
+ *   - `process.env.GITBULK_*` (die vom Executor gesetzten Variablen)
+ *   - normale Node-APIs (fs, etc.)
+ *
+ * @param workspace - Ablageort
+ * @param jsBody    - JavaScript-Code, der im Skript ausgeführt wird
+ * @returns Absoluter Pfad zum .mjs-Skript
+ */
+export function writeNodeScript(workspace: string, jsBody: string): string {
+  const path = join(workspace, `node-script-${Math.random().toString(36).slice(2, 10)}.mjs`);
+  writeFileSync(path, jsBody);
+  return path;
+}

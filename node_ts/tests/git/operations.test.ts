@@ -37,6 +37,7 @@ import {
   cleanup,
   setupRu,
   writeShellScript,
+  writeNodeScript,
 } from '../helpers/git-fixtures.js';
 
 let workspace: string;
@@ -234,7 +235,8 @@ describe('executeCodeChange', () => {
   });
 
   it('respects timeout', async () => {
-    const script = writeShellScript(workspace, 'sleep 30');
+    // Node-Skript (plattformneutral) statt `sleep 30` (braucht sh+coreutils).
+    const script = writeNodeScript(workspace, 'setTimeout(() => {}, 30000);\n');
     const start = Date.now();
     const r = await executeCodeChange(
       script,
@@ -243,14 +245,17 @@ describe('executeCodeChange', () => {
     );
     const elapsed = Date.now() - start;
     assert.equal(r.timedOut, true);
-    assert.ok(elapsed < 5000);
+    assert.ok(elapsed < 5000, `timeout should be quick, took ${elapsed}ms`);
   });
 
   it('synthesizes success in dry-run without running the script', async () => {
-    const marker = join(workspace, 'should-not-exist');
-    const script = writeShellScript(workspace, `touch "${marker}"`);
+    const marker = join(workspace, 'dryrun-marker.txt');
+    // Node-Skript (plattformneutral) statt `touch` (braucht sh+coreutils).
+    const script = writeNodeScript(
+      workspace,
+      `import { writeFileSync } from 'node:fs';\nwriteFileSync(${JSON.stringify(marker)}, 'x');\n`,
+    );
     // Note: in our design, dry-run DOES run the script (so user sees changes).
-    // We document and verify that here.
     const r = await executeCodeChange(
       script,
       { ru: 'x', ticket: 'AKB-1', branch: 'b', sourceBranch: 'master' },
@@ -264,15 +269,27 @@ describe('executeCodeChange', () => {
 });
 
 describe('resolveInterpreter', () => {
-  it('chooses sh for .sh scripts', () => {
+  const isWindows = process.platform === 'win32';
+
+  it('chooses a POSIX shell for .sh scripts', () => {
     const { command, prefixArgs } = resolveInterpreter('/path/to/script.sh');
-    assert.equal(command, 'sh');
+    if (isWindows) {
+      // Auf Windows wird Git's sh.exe gesucht → voller Pfad endend auf sh.exe
+      assert.match(command, /sh\.exe$/i);
+    } else {
+      assert.equal(command, 'sh');
+    }
     assert.deepEqual(prefixArgs, []);
   });
 
-  it('chooses bash for .bash scripts', () => {
+  it('chooses a shell for .bash scripts', () => {
     const { command } = resolveInterpreter('/path/to/script.bash');
-    assert.equal(command, 'bash');
+    if (isWindows) {
+      // Auf Windows mappen .sh und .bash beide auf Git's sh.exe
+      assert.match(command, /sh\.exe$/i);
+    } else {
+      assert.equal(command, 'bash');
+    }
   });
 
   it('chooses cmd.exe for .bat and .cmd scripts', () => {
@@ -305,7 +322,12 @@ describe('resolveInterpreter', () => {
   });
 
   it('is case-insensitive on the extension', () => {
-    assert.equal(resolveInterpreter('SCRIPT.SH').command, 'sh');
+    const sh = resolveInterpreter('SCRIPT.SH');
+    if (isWindows) {
+      assert.match(sh.command, /sh\.exe$/i);
+    } else {
+      assert.equal(sh.command, 'sh');
+    }
     assert.equal(resolveInterpreter('Run.BAT').command, 'cmd.exe');
   });
 });
