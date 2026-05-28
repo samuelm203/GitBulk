@@ -37,3 +37,7 @@ Thumbs.db
 
 # Lokale Test-Konfigurationen
 gitbulk.local.config.*
+
+.idea/
+workspace.xml
+
