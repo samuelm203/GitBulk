@@ -8,16 +8,6 @@ GitBulk allows you to perform defined Git operations (cloning, pulling, branchin
 
 🚧 **In Development** — Currently building the core framework.
 
-## Features
-
-- 📦 **Bulk Operations**: Execute commands across multiple Git repositories.
-- ⚙️ **Flexible Configuration**: Use **YAML, JSON, JS, or TS** for configuration.
-- 🚦 **Concurrency**: Configurable parallel execution limits.
-- 🧪 **Dry-Run Mode**: Safely test operations without pushing changes or creating PRs.
-- 🔁 **Resilience**: Configurable retry behavior with backoff and command timeouts.
-- 📊 **Reporting**: Structured logging and exit-code reports per repository.
-- 🔌 **PR Integration**: Automatic Pull Request creation (supports Bitbucket and Azure DevOps).
-
 ## Requirements
 
 - **Node.js**: >= 20.0.0
