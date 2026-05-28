@@ -102,132 +102,133 @@ export type RetryConfig = z.infer<typeof RetryConfigSchema>;
  *
  * Felder mit Flowchart-Bezug sind im JSDoc gekennzeichnet.
  */
-export const GitBulkConfigSchema = z.object({
-  // ──────────────────────────────────────────────────────────────
-  // Phase 1: "Input from User" — Pflichtfelder im Datei-Modus
-  // ──────────────────────────────────────────────────────────────
+export const GitBulkConfigSchema = z
+  .object({
+    // ──────────────────────────────────────────────────────────────
+    // Phase 1: "Input from User" — Pflichtfelder im Datei-Modus
+    // ──────────────────────────────────────────────────────────────
 
-  /** Flowchart: `$config.rus` — Liste der Repository-Units */
-  rus: z
-    .union([z.string(), z.array(z.string())])
-    .transform((input) => {
-      const result = validateRuList(input);
-      if (!result.ok) {
-        // Wird durch superRefine erneut geprüft; transform liefert hier
-        // bereits den bereinigten Array, sodass Folgeprüfungen darauf laufen.
-        return [];
-      }
-      return result.value;
-    })
-    .superRefine((value, ctx) => {
-      if (value.length === 0) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: 'Error: RU list is missing',
-        });
-      }
-    }),
+    /** Flowchart: `$config.rus` — Liste der Repository-Units */
+    rus: z
+      .union([z.string(), z.array(z.string())])
+      .transform((input) => {
+        const result = validateRuList(input);
+        if (!result.ok) {
+          // Wird durch superRefine erneut geprüft; transform liefert hier
+          // bereits den bereinigten Array, sodass Folgeprüfungen darauf laufen.
+          return [];
+        }
+        return result.value;
+      })
+      .superRefine((value, ctx) => {
+        if (value.length === 0) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'Error: RU list is missing',
+          });
+        }
+      }),
 
-  /** Flowchart: `$config.ticket` — z. B. `AKB-1234` (zusätzlicher Input-Schritt) */
-  ticket: z.string().superRefine(asZodCheck(validateTicket)),
+    /** Flowchart: `$config.ticket` — z. B. `AKB-1234` (zusätzlicher Input-Schritt) */
+    ticket: z.string().superRefine(asZodCheck(validateTicket)),
 
-  /** Flowchart: `$config.branch` — Branch-Name (ohne Ticket-Präfix) */
-  branch: z.string().superRefine(asZodCheck(validateBranchName)),
+    /** Flowchart: `$config.branch` — Branch-Name (ohne Ticket-Präfix) */
+    branch: z.string().superRefine(asZodCheck(validateBranchName)),
 
-  /** Flowchart: `$config.script` — Pfad zum Code-Change-Skript */
-  script: z.string().superRefine(asZodCheck(validateFilePath)),
+    /** Flowchart: `$config.script` — Pfad zum Code-Change-Skript */
+    script: z.string().superRefine(asZodCheck(validateFilePath)),
 
-  /** Flowchart: `$config.commitMessage` — Commit-Message */
-  commitMessage: z.string().superRefine(asZodCheck(validateMessage)),
+    /** Flowchart: `$config.commitMessage` — Commit-Message */
+    commitMessage: z.string().superRefine(asZodCheck(validateMessage)),
 
-  /** Flowchart: `$config.prSummary` — PR-Titel/Beschreibung */
-  prSummary: z.string().superRefine(asZodCheck(validateMessage)),
+    /** Flowchart: `$config.prSummary` — PR-Titel/Beschreibung */
+    prSummary: z.string().superRefine(asZodCheck(validateMessage)),
 
-  /**
-   * Flowchart: `$config.createPrOnError` — Pull Request auch dann erstellen,
-   * wenn das Code-Change-Skript mit Exit-Code != 0 endete.
-   */
-  createPrOnError: z.boolean(),
+    /**
+     * Flowchart: `$config.createPrOnError` — Pull Request auch dann erstellen,
+     * wenn das Code-Change-Skript mit Exit-Code != 0 endete.
+     */
+    createPrOnError: z.boolean(),
 
-  // ──────────────────────────────────────────────────────────────
-  // Zusätzliche Felder im Datei-Modus (alle optional mit Defaults)
-  // ──────────────────────────────────────────────────────────────
+    // ──────────────────────────────────────────────────────────────
+    // Zusätzliche Felder im Datei-Modus (alle optional mit Defaults)
+    // ──────────────────────────────────────────────────────────────
 
-  /**
-   * Wurzelverzeichnis, in dem die RU-Repositories erwartet werden.
-   * Standard: aktuelles Arbeitsverzeichnis.
-   *
-   * NICHT IM FLOWCHART: Das Flowchart geht implizit davon aus, dass der
-   * User im richtigen Verzeichnis steht. Für den Datei-Modus brauchen wir
-   * eine explizite Angabe, sonst sind Bulk-Operationen über mehrere
-   * Repos technisch nicht möglich.
-   */
-  workspaceDir: z.string().optional(),
+    /**
+     * Wurzelverzeichnis, in dem die RU-Repositories erwartet werden.
+     * Standard: aktuelles Arbeitsverzeichnis.
+     *
+     * NICHT IM FLOWCHART: Das Flowchart geht implizit davon aus, dass der
+     * User im richtigen Verzeichnis steht. Für den Datei-Modus brauchen wir
+     * eine explizite Angabe, sonst sind Bulk-Operationen über mehrere
+     * Repos technisch nicht möglich.
+     */
+    workspaceDir: z.string().optional(),
 
-  /**
-   * Wenn `true`, klont GitBulk fehlende Repos automatisch (statt sie zu
-   * überspringen). Flowchart: nicht vorgesehen — siehe Abweichungen.
-   */
-  cloneIfMissing: z.boolean().default(false),
+    /**
+     * Wenn `true`, klont GitBulk fehlende Repos automatisch (statt sie zu
+     * überspringen). Flowchart: nicht vorgesehen — siehe Abweichungen.
+     */
+    cloneIfMissing: z.boolean().default(false),
 
-  /**
-   * Basis-URL für `git clone` (nur relevant wenn `cloneIfMissing: true`).
-   * Beispiel: `https://bitbucket.org/my-workspace/`.
-   */
-  cloneBaseUrl: z.string().url().optional(),
+    /**
+     * Basis-URL für `git clone` (nur relevant wenn `cloneIfMissing: true`).
+     * Beispiel: `https://bitbucket.org/my-workspace/`.
+     */
+    cloneBaseUrl: z.string().url().optional(),
 
-  /**
-   * Quell-Branch, auf den GitBulk vor dem Feature-Branch-Anlegen wechselt.
-   * Flowchart: hardcoded `master`. Wir machen das konfigurierbar, weil
-   * viele Repos heute `main` nutzen.
-   */
-  sourceBranch: z.string().min(1).default('master'),
+    /**
+     * Quell-Branch, auf den GitBulk vor dem Feature-Branch-Anlegen wechselt.
+     * Flowchart: hardcoded `master`. Wir machen das konfigurierbar, weil
+     * viele Repos heute `main` nutzen.
+     */
+    sourceBranch: z.string().min(1).default('master'),
 
-  /** Retry-Konfiguration für `git push` */
-  retry: RetryConfigSchema.default({}),
+    /** Retry-Konfiguration für `git push` */
+    retry: RetryConfigSchema.default({}),
 
-  /**
-   * Anzahl der parallel verarbeitbaren RUs. Flowchart suggeriert sequentiell,
-   * aber für Bulk macht parallele Verarbeitung Sinn (mit konservativem Default).
-   */
-  concurrency: z.number().int().min(1).max(50).default(1),
+    /**
+     * Anzahl der parallel verarbeitbaren RUs. Flowchart suggeriert sequentiell,
+     * aber für Bulk macht parallele Verarbeitung Sinn (mit konservativem Default).
+     */
+    concurrency: z.number().int().min(1).max(50).default(1),
 
-  /**
-   * Timeout in Millisekunden pro Git-Befehl. Verhindert hängende Auth-Prompts.
-   * Flowchart: nicht vorgesehen — defensive Erweiterung.
-   */
-  commandTimeoutMs: z.number().int().min(1000).default(120_000),
+    /**
+     * Timeout in Millisekunden pro Git-Befehl. Verhindert hängende Auth-Prompts.
+     * Flowchart: nicht vorgesehen — defensive Erweiterung.
+     */
+    commandTimeoutMs: z.number().int().min(1000).default(120_000),
 
-  /** Dry-Run-Modus: keine schreibenden Git-Operationen, kein API-Call */
-  dryRun: z.boolean().default(false),
+    /** Dry-Run-Modus: keine schreibenden Git-Operationen, kein API-Call */
+    dryRun: z.boolean().default(false),
 
-  /**
-   * Wenn `true`, werden Git-Hooks (pre-commit, commit-msg, pre-push, …)
-   * bei allen Git-Befehlen deaktiviert. Nützlich für Bulk-Operationen,
-   * wo Linter/Formatter pro Repo das Verhalten verändern oder verzögern
-   * würden.
-   *
-   * Implementiert via `git -c core.hooksPath=/dev/null` im Executor.
-   * Flowchart: nicht vorgesehen — siehe Abweichungen-Liste.
-   */
-  skipHooks: z.boolean().default(false),
+    /**
+     * Wenn `true`, werden Git-Hooks (pre-commit, commit-msg, pre-push, …)
+     * bei allen Git-Befehlen deaktiviert. Nützlich für Bulk-Operationen,
+     * wo Linter/Formatter pro Repo das Verhalten verändern oder verzögern
+     * würden.
+     *
+     * Implementiert via `git -c core.hooksPath=/dev/null` im Executor.
+     * Flowchart: nicht vorgesehen — siehe Abweichungen-Liste.
+     */
+    skipHooks: z.boolean().default(false),
 
-  // ──────────────────────────────────────────────────────────────
-  // PR-Plattform
-  // ──────────────────────────────────────────────────────────────
+    // ──────────────────────────────────────────────────────────────
+    // PR-Plattform
+    // ──────────────────────────────────────────────────────────────
 
-  /**
-   * Welche PR-Plattform verwenden? Auswahl bestimmt, welches
-   * Sub-Schema (`bitbucket` / `azureDevOps`) ausgewertet wird.
-   */
-  prPlatform: PrPlatformSchema,
+    /**
+     * Welche PR-Plattform verwenden? Auswahl bestimmt, welches
+     * Sub-Schema (`bitbucket` / `azureDevOps`) ausgewertet wird.
+     */
+    prPlatform: PrPlatformSchema,
 
-  /** Bitbucket-spezifische Settings (Pflicht wenn prPlatform === 'bitbucket') */
-  bitbucket: BitbucketConfigSchema.optional(),
+    /** Bitbucket-spezifische Settings (Pflicht wenn prPlatform === 'bitbucket') */
+    bitbucket: BitbucketConfigSchema.optional(),
 
-  /** Azure-DevOps-spezifische Settings (Pflicht wenn prPlatform === 'azure-devops') */
-  azureDevOps: AzureDevOpsConfigSchema.optional(),
-})
+    /** Azure-DevOps-spezifische Settings (Pflicht wenn prPlatform === 'azure-devops') */
+    azureDevOps: AzureDevOpsConfigSchema.optional(),
+  })
   // Cross-Field-Validierung: passende Sub-Config muss vorhanden sein.
   .superRefine((config, ctx) => {
     if (config.prPlatform === 'bitbucket' && !config.bitbucket) {

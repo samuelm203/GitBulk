@@ -86,7 +86,10 @@ export async function promptUntilValid<T>(
  *
  * @returns `true` wenn der User die Config bestätigt, `false` für Neustart
  */
-export async function confirmConfig(rl: Interface, config: InteractiveInputResult): Promise<boolean> {
+export async function confirmConfig(
+  rl: Interface,
+  config: InteractiveInputResult,
+): Promise<boolean> {
   output.write('\n');
   output.write(chalk.bold('━━━ Configuration Summary ━━━\n'));
   output.write(`  ${chalk.gray('RUs:')}             ${config.rus.join(', ')}\n`);
@@ -95,9 +98,7 @@ export async function confirmConfig(rl: Interface, config: InteractiveInputResul
   output.write(`  ${chalk.gray('Script:')}          ${config.script}\n`);
   output.write(`  ${chalk.gray('Commit message:')}  ${config.commitMessage}\n`);
   output.write(`  ${chalk.gray('PR summary:')}      ${config.prSummary}\n`);
-  output.write(
-    `  ${chalk.gray('PR on error:')}     ${config.createPrOnError ? 'Yes' : 'No'}\n`,
-  );
+  output.write(`  ${chalk.gray('PR on error:')}     ${config.createPrOnError ? 'Yes' : 'No'}\n`);
   output.write(chalk.bold('━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'));
 
   return promptUntilValid(rl, 'Confirm configuration? (Y/N):', validateYesNo);
@@ -121,18 +122,10 @@ export async function runInteractivePrompts(): Promise<InteractiveInputResult> {
       output.write(chalk.bold('\n━━━ GitBulk Configuration ━━━\n\n'));
 
       // 1. RU-Liste
-      const rus = await promptUntilValid(
-        rl,
-        'List of RUs, separated by commas:',
-        validateRuList,
-      );
+      const rus = await promptUntilValid(rl, 'List of RUs, separated by commas:', validateRuList);
 
       // 2. Ticket (eigener Schritt, wie vom User angefordert)
-      const ticket = await promptUntilValid(
-        rl,
-        'Enter ticket (e.g. AKB-1234):',
-        validateTicket,
-      );
+      const ticket = await promptUntilValid(rl, 'Enter ticket (e.g. AKB-1234):', validateTicket);
 
       // 3. Branch-Name
       const branch = await promptUntilValid(rl, 'Enter branch name:', validateBranchName);

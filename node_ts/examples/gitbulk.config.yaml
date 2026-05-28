@@ -23,10 +23,10 @@ branch: feature/update-dependencies
 script: ./scripts/update-deps.sh
 
 # Commit-Message bei erfolgreichem Code-Change
-commitMessage: "feat: update shared dependencies"
+commitMessage: 'feat: update shared dependencies'
 
 # PR-Titel und/oder -Beschreibung
-prSummary: "Update shared dependencies across services"
+prSummary: 'Update shared dependencies across services'
 
 # Pull Request auch dann erstellen, wenn das Code-Change-Skript fehlschlägt?
 createPrOnError: false
@@ -73,7 +73,7 @@ bitbucket:
   targetBranch: master
   reviewers:
     - reviewer-username-1
-    - "{1234abcd-uuid-form}"
+    - '{1234abcd-uuid-form}'
 
 # Hinweis: Der API-Token wird NICHT in der Datei abgelegt.
 # Setze ihn als Umgebungsvariable:

@@ -129,7 +129,9 @@ async function importCodeFile(absolutePath: string): Promise<unknown> {
       [key: string]: unknown;
     };
   } catch (err) {
-    throw new ConfigError(`Failed to import config from ${absolutePath}: ${(err as Error).message}`);
+    throw new ConfigError(
+      `Failed to import config from ${absolutePath}: ${(err as Error).message}`,
+    );
   }
 
   if (mod.default === undefined) {
@@ -179,7 +181,9 @@ async function readConfigFile(absolutePath: string): Promise<unknown> {
 /**
  * Wandelt Zod-Issues in eine lesbare Fehler-Detail-Liste um.
  */
-function formatZodIssues(issues: ReadonlyArray<{ path: PropertyKey[]; message: string }>): string[] {
+function formatZodIssues(
+  issues: ReadonlyArray<{ path: PropertyKey[]; message: string }>,
+): string[] {
   return issues.map((issue) => {
     const path = issue.path.length > 0 ? issue.path.join('.') : '<root>';
     return `${path}: ${issue.message}`;
@@ -285,7 +289,9 @@ export async function loadConfig(options: LoadConfigOptions = {}): Promise<GitBu
  * Für den reinen Interaktiv-Modus ohne PR-Plattform-Settings empfehlen
  * wir den User auf den Hybrid-Modus zu schicken.
  */
-function finalizeInteractiveOnly(interactive: Awaited<ReturnType<typeof runInteractivePrompts>>): GitBulkConfig {
+function finalizeInteractiveOnly(
+  interactive: Awaited<ReturnType<typeof runInteractivePrompts>>,
+): GitBulkConfig {
   const candidate = {
     ...interactive,
     prPlatform: process.env.GITBULK_PR_PLATFORM,
@@ -294,22 +300,22 @@ function finalizeInteractiveOnly(interactive: Awaited<ReturnType<typeof runInter
           workspace: process.env.GITBULK_BITBUCKET_WORKSPACE,
           apiBaseUrl: process.env.GITBULK_BITBUCKET_API_URL,
           targetBranch: process.env.GITBULK_BITBUCKET_TARGET_BRANCH ?? 'master',
-          reviewers: process.env.GITBULK_BITBUCKET_REVIEWERS?.split(',').map((s) => s.trim()).filter(Boolean) ?? [],
+          reviewers:
+            process.env.GITBULK_BITBUCKET_REVIEWERS?.split(',')
+              .map((s) => s.trim())
+              .filter(Boolean) ?? [],
         }
       : undefined,
   };
 
   const result = GitBulkConfigSchema.safeParse(candidate);
   if (!result.success) {
-    throw new ConfigError(
-      'Interactive-only mode requires PR platform settings via environment',
-      [
-        ...formatZodIssues(result.error.issues),
-        '',
-        'Set GITBULK_PR_PLATFORM=bitbucket (or azure-devops) plus the matching workspace env vars,',
-        'or use a config file with --config to provide PR platform settings.',
-      ],
-    );
+    throw new ConfigError('Interactive-only mode requires PR platform settings via environment', [
+      ...formatZodIssues(result.error.issues),
+      '',
+      'Set GITBULK_PR_PLATFORM=bitbucket (or azure-devops) plus the matching workspace env vars,',
+      'or use a config file with --config to provide PR platform settings.',
+    ]);
   }
   return Object.freeze(result.data);
 }

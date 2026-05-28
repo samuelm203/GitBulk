@@ -17,9 +17,7 @@ import { resolve } from 'node:path';
  * Bei Erfolg enthält `value` den normalisierten Wert (z. B. getrimmt),
  * bei Fehler enthält `error` die Meldung, die laut Flowchart angezeigt wird.
  */
-export type ValidationResult<T> =
-  | { ok: true; value: T }
-  | { ok: false; error: string };
+export type ValidationResult<T> = { ok: true; value: T } | { ok: false; error: string };
 
 /**
  * Validiert die RU-Liste (Flowchart: `Is [config.rus] empty?`).

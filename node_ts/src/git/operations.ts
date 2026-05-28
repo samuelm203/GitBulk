@@ -21,12 +21,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { runGit, runGitChecked, killProcessTree, type GitCommandResult } from './executor.js';
 import type { Logger } from '../utils/logger.js';
 import { getDefaultLogger } from '../utils/logger.js';
-import {
-  retry,
-  type AttemptResult,
-  type RetryResult,
-  type RetryOptions,
-} from '../utils/retry.js';
+import { retry, type AttemptResult, type RetryResult, type RetryOptions } from '../utils/retry.js';
 
 /**
  * Gemeinsame Parameter für alle Operationen.
@@ -51,7 +46,10 @@ export interface BaseGitOptions {
  * Bündelt die Executor-Optionen aus den BaseGitOptions. Reine Convenience —
  * spart Boilerplate in jeder Operation.
  */
-function toExecOpts(base: BaseGitOptions, writeOp: boolean): {
+function toExecOpts(
+  base: BaseGitOptions,
+  writeOp: boolean,
+): {
   cwd: string;
   timeoutMs: number;
   dryRun?: boolean;
@@ -136,7 +134,10 @@ export async function cloneRepo(
  */
 export async function readCurrentBranch(base: BaseGitOptions): Promise<string> {
   // Read-only → kein dryRun
-  const result = await runGitChecked(['rev-parse', '--abbrev-ref', 'HEAD'], toExecOpts(base, false));
+  const result = await runGitChecked(
+    ['rev-parse', '--abbrev-ref', 'HEAD'],
+    toExecOpts(base, false),
+  );
   const branch = result.stdout.trim();
 
   if (branch === 'HEAD') {
@@ -577,37 +578,36 @@ export async function pushFeatureBranch(
   if (base.logger) retryOpts.logger = base.logger;
   if (base.signal) retryOpts.signal = base.signal;
 
-  return retry<GitCommandResult>(
-    async (): Promise<AttemptResult<GitCommandResult>> => {
-      const result = await runGit(
-        ['push', 'origin', branchName, '--force-with-lease'],
-        toExecOpts(base, true),
+  return retry<GitCommandResult>(async (): Promise<AttemptResult<GitCommandResult>> => {
+    const result = await runGit(
+      ['push', 'origin', branchName, '--force-with-lease'],
+      toExecOpts(base, true),
+    );
+
+    if (result.exitCode === 0) {
+      return { ok: true, value: result };
+    }
+
+    const combined = `${result.stderr}\n${result.stdout}`;
+    const isPermanent = PUSH_PERMANENT_ERROR_PATTERNS.some((pat) => pat.test(combined));
+
+    if (isPermanent) {
+      logger.warn(
+        `push got permanent error: ${result.stderr.trim().split('\n')[0] ?? '(no stderr)'}`,
       );
-
-      if (result.exitCode === 0) {
-        return { ok: true, value: result };
-      }
-
-      const combined = `${result.stderr}\n${result.stdout}`;
-      const isPermanent = PUSH_PERMANENT_ERROR_PATTERNS.some((pat) => pat.test(combined));
-
-      if (isPermanent) {
-        logger.warn(`push got permanent error: ${result.stderr.trim().split('\n')[0] ?? '(no stderr)'}`);
-        return {
-          ok: false,
-          retry: false,
-          error: result.stderr.trim() || `exit ${result.exitCode}`,
-        };
-      }
-
       return {
         ok: false,
-        retry: true,
+        retry: false,
         error: result.stderr.trim() || `exit ${result.exitCode}`,
       };
-    },
-    retryOpts,
-  );
+    }
+
+    return {
+      ok: false,
+      retry: true,
+      error: result.stderr.trim() || `exit ${result.exitCode}`,
+    };
+  }, retryOpts);
 }
 
 // ──────────────────────────────────────────────────────────────────

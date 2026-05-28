@@ -76,7 +76,8 @@ export function printRunSummary(summary: RunSummary, options: { noColor?: boolea
 
     // Detail-Spalte: aussagekräftigste Info
     const detail = pickDetail(r);
-    const detailTrunc = detail.length > detailWidth ? `${detail.slice(0, detailWidth - 1)}…` : detail;
+    const detailTrunc =
+      detail.length > detailWidth ? `${detail.slice(0, detailWidth - 1)}…` : detail;
 
     const ruCol = r.ru.padEnd(ruWidth);
     const statusLabel = `${style.symbol} ${style.label}`;
@@ -110,7 +111,9 @@ export function printRunSummary(summary: RunSummary, options: { noColor?: boolea
   if (t.fatalErrors > 0) {
     parts.push(useColor ? chalk.red.bold(`${t.fatalErrors} fatal`) : `${t.fatalErrors} fatal`);
   }
-  out.write(`Total: ${t.rus} RUs — ${parts.join(', ')} — ${fmtDuration(summary.totalDurationMs)}\n`);
+  out.write(
+    `Total: ${t.rus} RUs — ${parts.join(', ')} — ${fmtDuration(summary.totalDurationMs)}\n`,
+  );
 
   // PR-URLs auflisten
   const created = summary.results.filter((r) => r.outcome === 'pr-created' && r.phase4.prUrl);

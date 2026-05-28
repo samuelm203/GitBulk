@@ -235,9 +235,7 @@ export async function retry<T>(
 
     // Letzter Versuch — kein Warten mehr, direkt scheitern
     if (attempt >= options.maxAttempts) {
-      logger.warn(
-        `${label} failed after ${options.maxAttempts} attempts: ${lastError}`,
-      );
+      logger.warn(`${label} failed after ${options.maxAttempts} attempts: ${lastError}`);
       return {
         ok: false,
         error: lastError,

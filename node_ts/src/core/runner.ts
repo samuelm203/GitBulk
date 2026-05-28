@@ -139,11 +139,7 @@ async function processRu(
 /**
  * Aggregiert die Einzelergebnisse zu einer `RunSummary`.
  */
-function buildSummary(
-  results: RuResult[],
-  startedAt: Date,
-  finishedAt: Date,
-): RunSummary {
+function buildSummary(results: RuResult[], startedAt: Date, finishedAt: Date): RunSummary {
   const totals = {
     rus: results.length,
     prsCreated: 0,

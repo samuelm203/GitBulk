@@ -49,11 +49,7 @@ function buildProgram(): Command {
       'hybrid',
     )
     .option('--dry-run', 'Do not perform any write operations (push, PR API)', false)
-    .option(
-      '-l, --log-level <level>',
-      `Log level: ${LOG_LEVELS.join(' | ')}`,
-      'info',
-    )
+    .option('-l, --log-level <level>', `Log level: ${LOG_LEVELS.join(' | ')}`, 'info')
     .option('--no-color', 'Disable colored output');
 
   return program;
@@ -125,7 +121,9 @@ async function main(): Promise<number> {
   process.on('SIGINT', () => {
     sigintCount++;
     if (sigintCount === 1) {
-      process.stderr.write('\nReceived SIGINT, attempting graceful shutdown (Ctrl+C again to force)…\n');
+      process.stderr.write(
+        '\nReceived SIGINT, attempting graceful shutdown (Ctrl+C again to force)…\n',
+      );
       abortController.abort();
     } else {
       process.stderr.write('\nForce-exit.\n');

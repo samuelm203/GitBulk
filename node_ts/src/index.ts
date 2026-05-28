@@ -18,4 +18,3 @@
 // export type { GitBulkConfig, RepositoryConfig } from './config/types.js';
 
 export const VERSION = '0.1.0';
-

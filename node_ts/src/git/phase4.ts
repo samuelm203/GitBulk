@@ -18,17 +18,8 @@
 
 import type { GitBulkConfig } from '../config/schema.js';
 import type { Phase3Result } from './phase3.js';
-import type {
-  CreatePrInput,
-  CreatePrResult,
-  PullRequestAdapter,
-} from './pr-adapter.js';
-import {
-  retry,
-  type AttemptResult,
-  type RetryOptions,
-  type RetryResult,
-} from '../utils/retry.js';
+import type { CreatePrInput, CreatePrResult, PullRequestAdapter } from './pr-adapter.js';
+import { retry, type AttemptResult, type RetryOptions, type RetryResult } from '../utils/retry.js';
 import { getDefaultLogger } from '../utils/logger.js';
 
 /**

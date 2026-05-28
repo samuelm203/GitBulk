@@ -24,11 +24,7 @@
 import { Buffer } from 'node:buffer';
 
 import type { BitbucketConfig } from '../config/schema.js';
-import type {
-  CreatePrInput,
-  CreatePrResult,
-  PullRequestAdapter,
-} from './pr-adapter.js';
+import type { CreatePrInput, CreatePrResult, PullRequestAdapter } from './pr-adapter.js';
 import { getDefaultLogger, type Logger } from '../utils/logger.js';
 
 /**
@@ -102,9 +98,7 @@ export class BitbucketPrAdapter implements PullRequestAdapter {
   public async createPullRequest(input: CreatePrInput): Promise<CreatePrResult> {
     const { url, body } = this.buildRequest(input);
 
-    this.logger.debug(
-      `POST ${url} (source=${input.sourceBranch} → target=${input.targetBranch})`,
-    );
+    this.logger.debug(`POST ${url} (source=${input.sourceBranch} → target=${input.targetBranch})`);
 
     let response: Response;
     try {
@@ -190,11 +184,7 @@ export class BitbucketPrAdapter implements PullRequestAdapter {
    * Beide Plattformvarianten haben unterschiedliche JSON-Strukturen,
    * also Fallback-freundlich parsen.
    */
-  private parseSuccess(
-    statusCode: number,
-    rawBody: string,
-    input: CreatePrInput,
-  ): CreatePrResult {
+  private parseSuccess(statusCode: number, rawBody: string, input: CreatePrInput): CreatePrResult {
     try {
       const data = JSON.parse(rawBody) as Record<string, unknown>;
 
@@ -202,8 +192,9 @@ export class BitbucketPrAdapter implements PullRequestAdapter {
         // Cloud: { id: 123, links: { html: { href: '...' } } }
         const id = (data.id as number | string | undefined) ?? 'unknown';
         const links = data.links as Record<string, { href?: string }> | undefined;
-        const url = links?.html?.href
-          ?? `https://bitbucket.org/${this.config.workspace}/${input.ru}/pull-requests/${id}`;
+        const url =
+          links?.html?.href ??
+          `https://bitbucket.org/${this.config.workspace}/${input.ru}/pull-requests/${id}`;
         return { ok: true, id, url, statusCode };
       }
 
