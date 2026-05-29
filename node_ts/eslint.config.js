@@ -20,7 +20,7 @@ export default [
 
   // TypeScript-Quellen und -Tests.
   {
-    files: ['src/**/*.{ts,js}', 'tests/**/*.ts'],
+    files: ['src/**/*.{ts,js}', 'tests/**/*.ts', 'scripts/**/*.{mjs,js,ts}'],
     languageOptions: {
       parser: tsParser,
       ecmaVersion: 2022,
