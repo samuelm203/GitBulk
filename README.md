@@ -306,16 +306,23 @@ gitbulk [options]
                          missing fields). Default: hybrid
       --dry-run          Do not perform any write operations (push, PR API)
       --tui              Run with an interactive terminal UI showing live per-RU progress
+      --only <rus>       Only process these RUs (comma-separated subset of the configured RUs)
   -l, --log-level <lvl>  debug | info | warn | error. Default: info
       --no-color         Disable colored output
   -v, --version          Print version and exit
   -h, --help             Show help
 
-gitbulk init [options]    Interactively generate a config or a standalone .mjs/.ts script
-
+gitbulk init [options]          Interactively generate a config or a standalone .mjs/.ts script
   -o, --output <path>    Output file path
   -f, --force            Overwrite the output file if it already exists
+
+gitbulk list-operations [opts]  List all available operations and their parameters
+      --json             Output as JSON (machine-readable)
 ```
+
+Use `--only` to run a subset without editing the config, e.g.
+`gitbulk --config gitbulk.yaml --only service-api,service-worker --dry-run`. Run
+`gitbulk list-operations` to see every declarative operation and its parameters.
 
 ---
 
