@@ -23,6 +23,8 @@ error handling so that a failure in one repository never derails the rest of the
 - [Installation](#installation)
 - [Quick start](#quick-start)
 - [Configuration](#configuration)
+- [Declarative operations](#declarative-operations)
+- [Generating a config with `gitbulk init`](#generating-a-config-with-gitbulk-init)
 - [CLI options](#cli-options)
 - [Terminal UI (TUI)](#terminal-ui-tui)
 - [How a run works](#how-a-run-works)
@@ -39,6 +41,11 @@ error handling so that a failure in one repository never derails the rest of the
 - **Parallel execution** with a configurable concurrency limit.
 - **Custom code-change scripts** per repository (any executable: `.sh`, `.bat`, `.cmd`,
   `.ps1`, `.js`/`.mjs`). The right interpreter is chosen automatically per platform.
+- **Declarative operations** as an alternative to scripts: configure a chain of reusable,
+  idempotent changes (add/replace/delete a file, regex replace, add a Maven dependency)
+  directly in the config — no scripting required.
+- **Interactive generator** (`gitbulk init`) that walks you through the available operations
+  and writes either a ready-to-run config or a standalone, editable `.mjs` script.
 - **Pull-request automation** for Bitbucket (Cloud and Server). The adapter layer is
   extensible for additional platforms.
 - **Automatic retries** with exponential backoff on transient API failures.
@@ -87,28 +94,46 @@ gitbulk --help
 
 ## Quick start
 
-1. Write a small code-change script, e.g. `update-deps.sh`:
+The fastest way to get going is the interactive generator:
 
-   ```sh
-   #!/bin/sh
-   # Available environment variables:
-   #   $GITBULK_RU, $GITBULK_TICKET, $GITBULK_BRANCH, $GITBULK_SOURCE_BRANCH
-   npm update --save
-   ```
+```bash
+gitbulk init
+```
 
-2. Create a config file, e.g. `gitbulk.yaml` (see [Configuration](#configuration)).
+It walks you through the available [operations](#declarative-operations) and writes either a
+ready-to-run config or a standalone `.mjs` script. Then preview and run:
 
-3. Preview the run without making any changes:
+```bash
+gitbulk --config gitbulk.config.yaml --dry-run   # preview, nothing is pushed
+gitbulk --config gitbulk.config.yaml --tui       # run for real, with the live UI
+```
 
-   ```bash
-   gitbulk --config gitbulk.yaml --dry-run
-   ```
+Prefer to write the config yourself? You have two ways to define the change per repository:
 
-4. Run it for real, with the live Terminal UI:
+**A) Declarative operations** — no scripting (see [Declarative operations](#declarative-operations)):
 
-   ```bash
-   gitbulk --config gitbulk.yaml --tui
-   ```
+```yaml
+operations:
+  - type: regex-replace
+    path: pom.xml
+    pattern: "<java.version>17</java.version>"
+    replacement: "<java.version>21</java.version>"
+```
+
+**B) A custom script** — full control, any language. E.g. `update-deps.sh`:
+
+```sh
+#!/bin/sh
+# Available env vars: $GITBULK_RU $GITBULK_TICKET $GITBULK_BRANCH $GITBULK_SOURCE_BRANCH
+npm update --save
+```
+
+```yaml
+script: ./scripts/update-deps.sh
+```
+
+Each config sets **exactly one** of `operations:` or `script:`. See
+[Configuration](#configuration) for the full file.
 
 ---
 
@@ -127,7 +152,15 @@ rus:
   - my-service-worker
 ticket: AKB-1234
 branch: feature/update-dependencies
+
+# Define the change with EITHER `script:` OR `operations:` (exactly one).
 script: ./scripts/update-deps.sh
+# operations:                       # alternative — see "Declarative operations"
+#   - type: regex-replace
+#     path: pom.xml
+#     pattern: "17"
+#     replacement: "21"
+
 commitMessage: "feat: update shared dependencies"
 prSummary: "Update shared dependencies across services"
 createPrOnError: false
@@ -158,7 +191,8 @@ bitbucket:
 | `rus`             | yes      | List of repository units (array or comma-separated string).        |
 | `ticket`          | yes      | Ticket identifier; prefixes the branch name (`<ticket>-<branch>`). |
 | `branch`          | yes      | Feature branch name (sanitized automatically).                     |
-| `script`          | yes      | Path to the code-change script run inside each repo.               |
+| `script`          | cond.    | Path to the code-change script. Set this **or** `operations`.      |
+| `operations`      | cond.    | List of declarative operations. Set this **or** `script`.          |
 | `commitMessage`   | yes      | Commit message used on a successful change.                        |
 | `prSummary`       | yes      | Title/description for the pull request.                            |
 | `createPrOnError` | yes      | Create a PR even if the code-change script fails.                  |
@@ -187,6 +221,76 @@ Your code-change script receives these environment variables:
 
 ---
 
+## Declarative operations
+
+Instead of writing a script, you can list one or more **operations** directly in the config.
+They run **in order** inside each repository, are **idempotent** (safe to re-run), and behave
+cleanly when their target file is missing. Use `operations:` *instead of* `script:`.
+
+```yaml
+operations:
+  - type: regex-replace
+    path: pom.xml
+    pattern: "<java.version>17</java.version>"
+    replacement: "<java.version>21</java.version>"
+  - type: maven-add-dependency
+    groupId: org.apache.commons
+    artifactId: commons-lang3
+    version: "3.14.0"
+  - type: add-file
+    path: .editorconfig
+    content: |
+      root = true
+      [*]
+      indent_style = space
+```
+
+If any operation reports an error, GitBulk treats the change like a failed script (commit message
+`ERROR WHILE CODE CHANGE`, PR only created when `createPrOnError: true`). If nothing changed, no PR
+is opened and the feature branch is deleted.
+
+### Available operations
+
+| `type`                 | Purpose                                              | Key parameters                                                                 |
+| ---------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `add-file`             | Create a file (incl. parent dirs).                   | `path`, `content`, `overwrite` (default `false`)                               |
+| `replace-file`         | Replace the full content of an existing file.        | `path`, `content`                                                              |
+| `delete-file`          | Delete a file (no-op if already gone).               | `path`                                                                         |
+| `regex-replace`        | Search & replace via a regular expression.           | `path`, `pattern`, `replacement`, `flags` (default `g`), `requireMatch`        |
+| `maven-add-dependency` | Add a dependency to a `pom.xml` project block.       | `groupId`, `artifactId`, `version`, `scope`, `pomPath` (default `pom.xml`)     |
+
+Paths are always relative to the repository and may not escape it (no absolute paths, no `..`).
+The list of operations and their parameters is also available interactively via `gitbulk init`.
+
+---
+
+## Generating a config with `gitbulk init`
+
+`gitbulk init` is an interactive generator. It walks you through the available operations,
+prompts only for the parameters each one needs (derived from its schema), and then lets you
+export the result as **either**:
+
+1. a ready-to-run **YAML config** (the `operations:` block plus the remaining required fields), or
+2. a standalone **`.mjs` code-change script** you can edit freely.
+
+```bash
+gitbulk init                       # interactive; writes ./gitbulk.config.yaml or ./gitbulk-change.mjs
+gitbulk init --output my.yaml      # choose the output path
+gitbulk init --force               # overwrite the output file without asking
+```
+
+A typical session: pick operations one by one, fill in their fields, choose the export format,
+done. Then run the generated config as usual:
+
+```bash
+gitbulk --config gitbulk.config.yaml --dry-run
+```
+
+> The Bitbucket token is never written to the config — it is read at runtime from the
+> `GITBULK_BITBUCKET_TOKEN` environment variable.
+
+---
+
 ## CLI options
 
 ```text
@@ -201,6 +305,11 @@ gitbulk [options]
       --no-color         Disable colored output
   -v, --version          Print version and exit
   -h, --help             Show help
+
+gitbulk init [options]    Interactively generate a config or a standalone .mjs script
+
+  -o, --output <path>    Output file path
+  -f, --force            Overwrite the output file if it already exists
 ```
 
 ---
@@ -238,8 +347,8 @@ For each repository, GitBulk follows a four-phase flow:
 1. **Input** — load and validate configuration (file and/or interactive).
 2. **Loop / runner** — iterate over all RUs, honoring the concurrency limit.
 3. **Per-repo git & code change** — ensure the repo exists, update the source branch,
-   create the feature branch, run the code-change script, then commit and push if there is a
-   diff.
+   create the feature branch, run the code change (your `script` *or* the configured
+   `operations`), then commit and push if there is a diff.
 4. **Pull-request API** — open a PR on the configured platform, with retries on transient
    failures.
 
