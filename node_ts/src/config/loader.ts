@@ -199,13 +199,24 @@ function missingRequiredFields(partial: PartialGitBulkConfig): string[] {
     'rus',
     'ticket',
     'branch',
-    'script',
     'commitMessage',
     'prSummary',
     'createPrOnError',
     'prPlatform',
   ];
-  return required.filter((key) => partial[key] === undefined);
+  const missing = required.filter((key) => partial[key] === undefined);
+
+  // `script` und `operations` sind Alternativen: genau eines muss vorhanden
+  // sein. Fehlt beides, fragen wir im Hybrid-Modus nach einem Skript (der
+  // interaktive Pfad kennt keine Operationen). Operationen kommen nur aus der
+  // Datei und unterdrücken hier die Skript-Nachfrage.
+  const hasScript = partial.script !== undefined;
+  const hasOperations = Array.isArray(partial.operations) && partial.operations.length > 0;
+  if (!hasScript && !hasOperations) {
+    missing.push('script');
+  }
+
+  return missing;
 }
 
 /**

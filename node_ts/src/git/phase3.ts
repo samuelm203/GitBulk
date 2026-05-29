@@ -36,6 +36,9 @@ import {
 import type { GitBulkConfig } from '../config/schema.js';
 import type { Logger } from '../utils/logger.js';
 import { getDefaultLogger } from '../utils/logger.js';
+// Seiteneffekt-Import registriert alle Operationen; `getOperation` löst sie
+// zur Laufzeit auf.
+import { getOperation, type OperationContext } from '../operations/index.js';
 
 /**
  * PR-Status (Flowchart-Variable `PR_Status`).
@@ -235,32 +238,60 @@ export async function runPhase3(ru: string, config: GitBulkConfig): Promise<Phas
     return result;
   }
 
-  // ── 3.4 Code-Change ausführen ──────────────────────────────────
-  let codeChange: { exitCode: number | null; stdout: string; stderr: string; timedOut: boolean };
-  try {
-    codeChange = await executeCodeChange(
-      config.script,
-      {
-        ru,
-        ticket: config.ticket,
-        branch: featureBranch,
-        sourceBranch: config.sourceBranch,
-      },
-      base,
+  // ── 3.4 Code-Change ausführen (deklarative Operationen ODER Skript) ──
+  // Beide Pfade münden in dasselbe `codeChangeOk`-Flag, sodass der restliche
+  // Ablauf (Diff-Check, commit, push, PR-Status) unverändert bleibt.
+  let codeChangeOk: boolean;
+  if (config.operations && config.operations.length > 0) {
+    const opCtx: OperationContext = {
+      repoDir: repoPath,
+      ru,
+      ticket: config.ticket,
+      branch: featureBranch,
+      sourceBranch: config.sourceBranch,
+    };
+    const opsResult = await runOperations(config.operations, opCtx, logger);
+    codeChangeOk = opsResult.ok;
+    result.notes.push(...opsResult.notes);
+    logger.debug(
+      `operations result: ok=${opsResult.ok}, changedAny=${opsResult.changedAny}`,
     );
-  } catch (err) {
-    // Skript konnte nicht gestartet werden (z. B. Interpreter fehlt auf Windows).
-    // Das ist ein fataler Fehler für diesen RU, darf aber den Bulk-Lauf nicht
-    // crashen. Wir behandeln es wie einen fehlgeschlagenen Code-Change ohne Diff.
-    const msg = `Code change script could not be executed: ${(err as Error).message}`;
+  } else if (config.script !== undefined) {
+    let codeChange: { exitCode: number | null; stdout: string; stderr: string; timedOut: boolean };
+    try {
+      codeChange = await executeCodeChange(
+        config.script,
+        {
+          ru,
+          ticket: config.ticket,
+          branch: featureBranch,
+          sourceBranch: config.sourceBranch,
+        },
+        base,
+      );
+    } catch (err) {
+      // Skript konnte nicht gestartet werden (z. B. Interpreter fehlt auf Windows).
+      // Das ist ein fataler Fehler für diesen RU, darf aber den Bulk-Lauf nicht
+      // crashen. Wir behandeln es wie einen fehlgeschlagenen Code-Change ohne Diff.
+      const msg = `Code change script could not be executed: ${(err as Error).message}`;
+      logger.error(msg);
+      result.fatalError = msg;
+      await performCleanup();
+      await deleteLocalBranchSafe(featureBranch, base, result, logger);
+      return result;
+    }
+    codeChangeOk = codeChange.exitCode === 0;
+    logger.debug(`code change exit: ${codeChange.exitCode}, timedOut: ${codeChange.timedOut}`);
+  } else {
+    // Sollte durch die Schema-Validierung (genau eines von script/operations)
+    // nie eintreten — defensiv als fataler Fehler behandeln.
+    const msg = 'No code change defined (neither script nor operations)';
     logger.error(msg);
     result.fatalError = msg;
     await performCleanup();
     await deleteLocalBranchSafe(featureBranch, base, result, logger);
     return result;
   }
-  const codeChangeOk = codeChange.exitCode === 0;
-  logger.debug(`code change exit: ${codeChange.exitCode}, timedOut: ${codeChange.timedOut}`);
 
   // ── 3.5 Diff-Check ─────────────────────────────────────────────
   let hasDiff = false;
@@ -358,4 +389,65 @@ async function deleteLocalBranchSafe(
     logger.debug(msg);
     result.notes.push(msg);
   }
+}
+
+/**
+ * Führt eine Kette deklarativer Operationen nacheinander im Repo aus.
+ *
+ * Aggregation (analog zur Exit-Code-/Diff-Logik des Skript-Pfads):
+ *   - `ok: false`, sobald IRGENDEINE Operation `error` liefert oder wirft
+ *     → entspricht Exit-Code != 0 ⇒ Commit-Message "ERROR WHILE CODE CHANGE".
+ *   - `changedAny: true`, wenn IRGENDEINE Operation `changed: true` meldet
+ *     (rein informativ — der echte Diff-Check in Phase 3.5 entscheidet ohnehin).
+ *
+ * Operationen sollen NUR Dateien ändern (kein git add/commit/push). Die
+ * Parameter werden erneut gegen das registrierte Schema geparst, damit Defaults
+ * (z. B. `pomPath`) angewendet werden — die Struktur wurde beim Laden bereits
+ * validiert.
+ */
+async function runOperations(
+  ops: ReadonlyArray<{ type: string }>,
+  ctx: OperationContext,
+  logger: Logger,
+): Promise<{ ok: boolean; changedAny: boolean; notes: string[] }> {
+  const notes: string[] = [];
+  let changedAny = false;
+  let hadError = false;
+
+  for (const opConfig of ops) {
+    const operation = getOperation(opConfig.type);
+    if (!operation) {
+      // Sollte durch die Schema-Validierung nie passieren — defensiv.
+      const msg = `[op ${opConfig.type}] unknown operation type`;
+      logger.error(msg);
+      notes.push(msg);
+      hadError = true;
+      continue;
+    }
+
+    try {
+      const params = operation.schema.parse(opConfig);
+      const res = await operation.apply(params, ctx);
+      if (res.changed) {
+        changedAny = true;
+      }
+      if (res.error) {
+        hadError = true;
+        const msg = `[op ${opConfig.type}] ${res.error}`;
+        logger.error(msg);
+        notes.push(msg);
+      } else {
+        const msg = `[op ${opConfig.type}] ${res.message}`;
+        logger.debug(msg);
+        notes.push(msg);
+      }
+    } catch (err) {
+      hadError = true;
+      const msg = `[op ${opConfig.type}] threw: ${(err as Error).message}`;
+      logger.error(msg);
+      notes.push(msg);
+    }
+  }
+
+  return { ok: !hadError, changedAny, notes };
 }

@@ -22,6 +22,9 @@ import {
   validateFilePath,
   validateMessage,
 } from '../utils/validators.js';
+// Seiteneffekt-Import: registriert alle bekannten Operationen, damit die
+// `operations`-Validierung weiter unten gegen die Registry prüfen kann.
+import { getOperation, listOperationTypes } from '../operations/index.js';
 
 /**
  * Helfer: Wandelt eine bestehende `ValidationResult`-Funktion in ein Zod-Refinement.
@@ -98,6 +101,24 @@ export const RetryConfigSchema = z.object({
 export type RetryConfig = z.infer<typeof RetryConfigSchema>;
 
 /**
+ * Schema für einen einzelnen Eintrag in der `operations`-Liste.
+ *
+ * Hier wird nur die Grundstruktur (`type` + beliebige Parameter) geprüft.
+ * Die parameterspezifische Validierung erfolgt im `superRefine` des
+ * Hauptschemas gegen das beim Operations-Typ registrierte Zod-Schema —
+ * so bleibt das Schema offen für neue Operationen, ohne diese Datei zu ändern.
+ *
+ * `passthrough()` behält die zusätzlichen Parameter (groupId, version, …),
+ * damit sie zur Laufzeit an die Operation weitergereicht werden können.
+ */
+export const OperationStepSchema = z
+  .object({
+    type: z.string().min(1, 'operation type must not be empty'),
+  })
+  .passthrough();
+export type OperationStep = z.infer<typeof OperationStepSchema>;
+
+/**
  * Hauptschema der GitBulk-Konfiguration.
  *
  * Felder mit Flowchart-Bezug sind im JSDoc gekennzeichnet.
@@ -135,8 +156,23 @@ export const GitBulkConfigSchema = z
     /** Flowchart: `$config.branch` — Branch-Name (ohne Ticket-Präfix) */
     branch: z.string().superRefine(asZodCheck(validateBranchName)),
 
-    /** Flowchart: `$config.script` — Pfad zum Code-Change-Skript */
-    script: z.string().superRefine(asZodCheck(validateFilePath)),
+    /**
+     * Flowchart: `$config.script` — Pfad zum Code-Change-Skript.
+     *
+     * Optional, weil alternativ `operations` (deklarative Code-Changes) gesetzt
+     * werden kann. Genau eines von beiden muss vorhanden sein (siehe superRefine).
+     */
+    script: z.string().superRefine(asZodCheck(validateFilePath)).optional(),
+
+    /**
+     * Deklarative Code-Change-Operationen als Alternative zu `script`.
+     *
+     * Eine **Liste**, weil Operationen verkettbar sind (mehrere nacheinander
+     * pro RU). Jeder Eintrag braucht ein `type:`; die übrigen Parameter werden
+     * gegen das beim Operations-Typ registrierte Schema validiert (superRefine).
+     * Genau eines von `script` / `operations` muss gesetzt sein.
+     */
+    operations: z.array(OperationStepSchema).optional(),
 
     /** Flowchart: `$config.commitMessage` — Commit-Message */
     commitMessage: z.string().superRefine(asZodCheck(validateMessage)),
@@ -250,6 +286,51 @@ export const GitBulkConfigSchema = z
         code: z.ZodIssueCode.custom,
         path: ['cloneBaseUrl'],
         message: 'cloneBaseUrl is required when cloneIfMissing is true',
+      });
+    }
+
+    // Genau eines von `script` / `operations` muss gesetzt sein.
+    const hasScript = config.script !== undefined;
+    const hasOperations = config.operations !== undefined && config.operations.length > 0;
+    if (!hasScript && !hasOperations) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['script'],
+        message: 'either "script" or a non-empty "operations" list is required',
+      });
+    }
+    if (hasScript && hasOperations) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['operations'],
+        message: 'set either "script" or "operations", not both',
+      });
+    }
+
+    // Jede Operation gegen ihr registriertes Schema validieren; unbekannte
+    // Typen früh (beim Laden) abweisen.
+    if (config.operations) {
+      config.operations.forEach((op, idx) => {
+        const registered = getOperation(op.type);
+        if (!registered) {
+          const known = listOperationTypes().join(', ') || 'none';
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['operations', idx, 'type'],
+            message: `unknown operation type "${op.type}" (known: ${known})`,
+          });
+          return;
+        }
+        const parsed = registered.schema.safeParse(op);
+        if (!parsed.success) {
+          for (const issue of parsed.error.issues) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: ['operations', idx, ...issue.path],
+              message: issue.message,
+            });
+          }
+        }
       });
     }
   });
