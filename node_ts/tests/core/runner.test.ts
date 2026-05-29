@@ -18,6 +18,7 @@ import {
   cleanup,
   setupRu,
   writeShellScript,
+  writeNodeScript,
 } from '../helpers/git-fixtures.js';
 
 before(() => {
@@ -150,7 +151,8 @@ describe('runBulk', () => {
       setupRu(ws, 'r1');
       setupRu(ws, 'r2');
       setupRu(ws, 'r3');
-      const script = writeShellScript(ws, 'echo "x" > new.txt');
+      // writeNodeScript ist auf Windows oft zuverlässiger als Shell-Skripte in Tests
+      const script = writeNodeScript(ws, 'import fs from "node:fs"; fs.writeFileSync("new.txt", "x");');
       const adapter = new MockAdapter();
 
       const summary = await runBulk(
@@ -158,7 +160,7 @@ describe('runBulk', () => {
         { prAdapter: adapter },
       );
 
-      assert.equal(summary.totals.prsCreated, 3);
+      assert.equal(summary.totals.prsCreated, 3, `Expected 3 PRs but got ${summary.totals.prsCreated}. Results: ${JSON.stringify(summary.results.map(r => ({ru: r.ru, outcome: r.outcome}) ))}`);
     } finally {
       cleanup(ws);
     }
@@ -218,6 +220,82 @@ describe('runBulk', () => {
       );
 
       assert.equal(summary.totals.notProcessed, 2);
+    } finally {
+      cleanup(ws);
+    }
+  });
+
+  it('fires onProgress events: running then final status per RU', async () => {
+    const ws = createWorkspace();
+    try {
+      setupRu(ws, 'r1');
+      const script = writeShellScript(ws, 'echo "x" > new.txt');
+
+      const events: Array<{ ru: string; status: string; outcome?: string | undefined }> = [];
+      await runBulk(makeConfig(ws, script, { rus: ['r1'] }), {
+        prAdapter: new MockAdapter(),
+        onProgress: (e) => {
+          events.push({ ru: e.ru, status: e.status, outcome: e.outcome });
+        },
+      });
+
+      // Mindestens 'running' und ein finaler Status.
+      const statuses = events.map((e) => e.status);
+      assert.ok(statuses.includes('running'), 'expected a running event');
+      assert.ok(
+        statuses.includes('done') || statuses.includes('failed') || statuses.includes('skipped'),
+        'expected a final status event',
+      );
+      // running kommt vor dem finalen Status.
+      const runningIdx = statuses.indexOf('running');
+      const finalIdx = statuses.findIndex((s) => s !== 'running');
+      assert.ok(runningIdx < finalIdx, 'running should precede final status');
+    } finally {
+      cleanup(ws);
+    }
+  });
+
+  it('onProgress reports correct index and total', async () => {
+    const ws = createWorkspace();
+    try {
+      setupRu(ws, 'r1');
+      setupRu(ws, 'r2');
+      setupRu(ws, 'r3');
+      const script = writeShellScript(ws, 'echo "x" > new.txt');
+
+      const totals = new Set<number>();
+      const indices = new Set<number>();
+      await runBulk(makeConfig(ws, script, { rus: ['r1', 'r2', 'r3'] }), {
+        prAdapter: new MockAdapter(),
+        onProgress: (e) => {
+          totals.add(e.total);
+          indices.add(e.index);
+        },
+      });
+
+      assert.deepEqual([...totals], [3], 'total should always be 3');
+      assert.deepEqual([...indices].sort(), [0, 1, 2], 'indices should be 0,1,2');
+    } finally {
+      cleanup(ws);
+    }
+  });
+
+  it('a throwing onProgress callback does not crash the run', async () => {
+    const ws = createWorkspace();
+    try {
+      setupRu(ws, 'r1');
+      const script = writeShellScript(ws, 'echo "x" > new.txt');
+
+      const summary = await runBulk(makeConfig(ws, script, { rus: ['r1'] }), {
+        prAdapter: new MockAdapter(),
+        onProgress: () => {
+          throw new Error('UI exploded');
+        },
+      });
+
+      // Lauf läuft trotz werfendem Callback sauber durch.
+      assert.equal(summary.totals.rus, 1);
+      assert.equal(summary.totals.prsCreated, 1);
     } finally {
       cleanup(ws);
     }

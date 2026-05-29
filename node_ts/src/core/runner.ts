@@ -58,6 +58,30 @@ export interface RunSummary {
 }
 
 /**
+ * Status einer RU während der Verarbeitung — für Live-Fortschritt (TUI/CLI).
+ *
+ *   - `running`  → Verarbeitung hat begonnen (Phase 3 startet)
+ *   - `done`     → erfolgreich abgeschlossen (Outcome steht fest, kein Fehler)
+ *   - `failed`   → mit Fehler abgeschlossen (pr-failed oder fatal-error)
+ *   - `skipped`  → übersprungen (not-processed oder pr-skipped)
+ */
+export type RuProgressStatus = 'running' | 'done' | 'failed' | 'skipped';
+
+/**
+ * Fortschritts-Event für eine einzelne RU.
+ */
+export interface RuProgressEvent {
+  ru: string;
+  status: RuProgressStatus;
+  /** Bei `done`/`failed`/`skipped`: das finale Outcome. Bei `running`: undefined. */
+  outcome?: RuResult['outcome'];
+  /** Index der RU in der Gesamtliste (0-basiert) — für "3/10"-Anzeigen. */
+  index: number;
+  /** Gesamtanzahl RUs. */
+  total: number;
+}
+
+/**
  * Optionen für den Runner.
  */
 export interface RunOptions {
@@ -67,6 +91,32 @@ export interface RunOptions {
   logger?: Logger;
   /** Optionales AbortSignal für kooperativen Abbruch (z. B. Ctrl+C). */
   signal?: AbortSignal;
+  /**
+   * Optionaler Fortschritts-Callback. Wird pro RU mindestens zweimal
+   * aufgerufen: einmal mit `running` beim Start, einmal mit dem finalen
+   * Status (`done`/`failed`/`skipped`). Genutzt von der TUI und optional
+   * vom CLI für Live-Anzeigen.
+   *
+   * Der Callback sollte NICHT werfen — Fehler darin werden vom Runner
+   * abgefangen und ignoriert, damit die UI den Lauf nicht crashen kann.
+   */
+  onProgress?: (event: RuProgressEvent) => void;
+}
+
+/**
+ * Mappt ein finales Outcome auf den gröberen Progress-Status.
+ */
+function outcomeToProgressStatus(outcome: RuResult['outcome']): RuProgressStatus {
+  switch (outcome) {
+    case 'pr-created':
+      return 'done';
+    case 'pr-failed':
+    case 'fatal-error':
+      return 'failed';
+    case 'pr-skipped':
+    case 'not-processed':
+      return 'skipped';
+  }
 }
 
 /**
@@ -91,13 +141,33 @@ async function processRu(
   config: GitBulkConfig,
   adapter: PullRequestAdapter,
   logger: Logger,
-  signal?: AbortSignal,
+  ctx: {
+    index: number;
+    total: number;
+    signal?: AbortSignal;
+    onProgress?: (event: RuProgressEvent) => void;
+  },
 ): Promise<RuResult> {
   const ruLogger = logger.withRu(ru);
   const startedAt = Date.now();
 
+  // Sicherer Event-Emitter: ein werfender Callback darf den Lauf nicht crashen.
+  const emit = (status: RuProgressStatus, outcome?: RuResult['outcome']): void => {
+    if (!ctx.onProgress) return;
+    // outcome nur ins Event aufnehmen, wenn gesetzt (exactOptionalPropertyTypes).
+    const event: RuProgressEvent =
+      outcome === undefined
+        ? { ru, status, index: ctx.index, total: ctx.total }
+        : { ru, status, outcome, index: ctx.index, total: ctx.total };
+    try {
+      ctx.onProgress(event);
+    } catch {
+      /* UI-Fehler ignorieren */
+    }
+  };
+
   // Frühzeitiger Abbruch-Check
-  if (signal?.aborted) {
+  if (ctx.signal?.aborted) {
     const phase3: Phase3Result = {
       ru,
       processed: false,
@@ -107,6 +177,7 @@ async function processRu(
       cleanupOk: true,
     };
     const phase4: Phase4Result = { ru, apiCalled: false, success: false, notes: [] };
+    emit('skipped', 'not-processed');
     return {
       ru,
       phase3,
@@ -116,6 +187,7 @@ async function processRu(
     };
   }
 
+  emit('running');
   ruLogger.info(`Starting processing`);
 
   // Phase 3
@@ -132,6 +204,7 @@ async function processRu(
     durationMs: Date.now() - startedAt,
   };
 
+  emit(outcomeToProgressStatus(result.outcome), result.outcome);
   ruLogger.info(`Done in ${result.durationMs}ms — outcome: ${result.outcome}`);
   return result;
 }
@@ -139,7 +212,11 @@ async function processRu(
 /**
  * Aggregiert die Einzelergebnisse zu einer `RunSummary`.
  */
-function buildSummary(results: RuResult[], startedAt: Date, finishedAt: Date): RunSummary {
+function buildSummary(
+  results: RuResult[],
+  startedAt: Date,
+  finishedAt: Date,
+): RunSummary {
   const totals = {
     rus: results.length,
     prsCreated: 0,
@@ -206,10 +283,20 @@ export async function runBulk(
   );
 
   const limit = pLimit(config.concurrency);
+  const total = config.rus.length;
+
+  // ctx-Basis; optionale Felder nur setzen wenn vorhanden (exactOptionalPropertyTypes).
+  const baseCtx: {
+    total: number;
+    signal?: AbortSignal;
+    onProgress?: (event: RuProgressEvent) => void;
+  } = { total };
+  if (options.signal) baseCtx.signal = options.signal;
+  if (options.onProgress) baseCtx.onProgress = options.onProgress;
 
   // Pro RU eine Task, p-limit regelt die parallele Ausführung.
-  const tasks = config.rus.map((ru) =>
-    limit(() => processRu(ru, config, adapter, logger, options.signal)),
+  const tasks = config.rus.map((ru, index) =>
+    limit(() => processRu(ru, config, adapter, logger, { ...baseCtx, index })),
   );
 
   const results = await Promise.all(tasks);
