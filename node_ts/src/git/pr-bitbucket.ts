@@ -29,10 +29,12 @@ import { getDefaultLogger, type Logger } from '../utils/logger.js';
 
 /**
  * Baut den Authorization-Header.
- * Wenn der Token ein `:` enthält → Basic-Auth (User:AppPassword).
- * Sonst → Bearer (Access Token).
+ * Bitbucket Cloud nutzt nun Bearer-Token (ATATT...).
  */
 function buildAuthHeader(token: string): string {
+  // Wenn der Token ein `:` enthält, könnte es noch ein altes App-Passwort sein (user:pass).
+  // Wir unterstützen das weiterhin über Basic-Auth, falls gewünscht.
+  // Aber für die neuen Tokens (Bearer) ist kein `:` enthalten.
   if (token.includes(':')) {
     return `Basic ${Buffer.from(token).toString('base64')}`;
   }

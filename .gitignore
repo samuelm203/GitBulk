@@ -41,3 +41,4 @@ gitbulk.local.config.*
 .idea/
 workspace.xml
 
+gitbulk.yaml

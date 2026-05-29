@@ -151,18 +151,18 @@ describe('BitbucketPrAdapter - Server variant', () => {
 });
 
 describe('BitbucketPrAdapter - Authentication', () => {
-  it('sends Bearer token by default', async () => {
+  it('sends Bearer token by default (for ATATT... tokens)', async () => {
     mock.enqueue({ status: 201, body: { id: 1 } });
     const adapter = new BitbucketPrAdapter(
       { workspace: 'ws', apiVariant: 'cloud', apiBaseUrl: mock.baseUrl, targetBranch: 'master', reviewers: [] },
-      'my-token-123',
+      'ATATT-bearer-token-123',
       silentLogger,
     );
     await adapter.createPullRequest(baseInput);
-    assert.equal(mock.requests[0]!.headers.authorization, 'Bearer my-token-123');
+    assert.equal(mock.requests[0]!.headers.authorization, 'Bearer ATATT-bearer-token-123');
   });
 
-  it('uses Basic auth when token contains colon', async () => {
+  it('uses Basic auth when token contains colon (for legacy app passwords)', async () => {
     mock.enqueue({ status: 201, body: { id: 1 } });
     const adapter = new BitbucketPrAdapter(
       { workspace: 'ws', apiVariant: 'cloud', apiBaseUrl: mock.baseUrl, targetBranch: 'master', reviewers: [] },

@@ -381,6 +381,8 @@ export function resolveInterpreter(scriptPath: string): {
     case '.js':
     case '.mjs':
     case '.cjs':
+      // Auf Windows ist eine .mjs Datei nicht direkt ausführbar.
+      // Wir verwenden process.execPath für den absoluten Pfad zur node.exe.
       return { command: process.execPath, prefixArgs: [] };
     default:
       // Ohne bekannte Endung: direkt ausführen (POSIX-Shebang) — auf Windows
