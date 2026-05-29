@@ -11,6 +11,10 @@
  */
 
 import './maven-add-dependency.js';
+import './add-file.js';
+import './replace-file.js';
+import './delete-file.js';
+import './regex-replace.js';
 
 // Re-Export der Registry-API für bequemen Zugriff.
 export {
