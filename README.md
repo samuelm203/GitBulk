@@ -40,12 +40,14 @@ error handling so that a failure in one repository never derails the rest of the
 - **Bulk operations** across any number of repositories from a single config.
 - **Parallel execution** with a configurable concurrency limit.
 - **Custom code-change scripts** per repository (any executable: `.sh`, `.bat`, `.cmd`,
-  `.ps1`, `.js`/`.mjs`). The right interpreter is chosen automatically per platform.
-- **Declarative operations** as an alternative to scripts: configure a chain of reusable,
-  idempotent changes (add/replace/delete a file, regex replace, add a Maven dependency)
-  directly in the config — no scripting required.
+  `.ps1`, `.js`/`.mjs`, and `.ts`/TypeScript). The right interpreter is chosen automatically
+  per platform.
+- **Declarative operations** as an alternative to scripts: configure a chain of reusable
+  changes (add/replace/delete a file, regex replace, add a Maven dependency) directly in the
+  config — they run in order, treat a missing target file as a no-op, and report whether
+  anything changed. No scripting required.
 - **Interactive generator** (`gitbulk init`) that walks you through the available operations
-  and writes either a ready-to-run config or a standalone, editable `.mjs` script.
+  and writes either a ready-to-run config or a standalone, editable `.mjs`/`.ts` script.
 - **Pull-request automation** for Bitbucket (Cloud and Server). The adapter layer is
   extensible for additional platforms.
 - **Automatic retries** with exponential backoff on transient API failures.
@@ -101,7 +103,7 @@ gitbulk init
 ```
 
 It walks you through the available [operations](#declarative-operations) and writes either a
-ready-to-run config or a standalone `.mjs` script. Then preview and run:
+ready-to-run config or a standalone `.mjs`/`.ts` script. Then preview and run:
 
 ```bash
 gitbulk --config gitbulk.config.yaml --dry-run   # preview, nothing is pushed
@@ -224,8 +226,10 @@ Your code-change script receives these environment variables:
 ## Declarative operations
 
 Instead of writing a script, you can list one or more **operations** directly in the config.
-They run **in order** inside each repository, are **idempotent** (safe to re-run), and behave
-cleanly when their target file is missing. Use `operations:` *instead of* `script:`.
+They run **in order** inside each repository, treat a **missing target file as a no-op** (no
+error), and **report whether they changed anything**. Most are also safe to re-run unchanged;
+the exception is `regex-replace`, which is only re-run-safe if your pattern no longer matches
+after the substitution. Use `operations:` *instead of* `script:`.
 
 ```yaml
 operations:
@@ -257,7 +261,7 @@ is opened and the feature branch is deleted.
 | `replace-file`         | Replace the full content of an existing file.        | `path`, `content`                                                              |
 | `delete-file`          | Delete a file (no-op if already gone).               | `path`                                                                         |
 | `regex-replace`        | Search & replace via a regular expression.           | `path`, `pattern`, `replacement`, `flags` (default `g`), `requireMatch`        |
-| `maven-add-dependency` | Add a dependency to a `pom.xml` project block.       | `groupId`, `artifactId`, `version`, `scope`, `pomPath` (default `pom.xml`)     |
+| `maven-add-dependency` | Add a dependency to the first project-level `<dependencies>` block (skips `<dependencyManagement>`); no-op if group+artifact already present. | `groupId`, `artifactId`, `version`, `scope`, `pomPath` (default `pom.xml`) |
 
 Paths are always relative to the repository and may not escape it (no absolute paths, no `..`).
 The list of operations and their parameters is also available interactively via `gitbulk init`.
@@ -266,21 +270,22 @@ The list of operations and their parameters is also available interactively via 
 
 ## Generating a config with `gitbulk init`
 
-`gitbulk init` is an interactive generator. It walks you through the available operations,
-prompts only for the parameters each one needs (derived from its schema), and then lets you
-export the result as **either**:
+`gitbulk init` is an interactive generator. It first asks **what** you want to create, walks you
+through the available operations, prompts only for the parameters each one needs (derived from its
+schema), and writes one of:
 
 1. a ready-to-run **YAML config** (the `operations:` block plus the remaining required fields), or
-2. a standalone **`.mjs` code-change script** you can edit freely.
+2. a standalone **code-change script** you can edit freely — in **JavaScript (`.mjs`)** or
+   **TypeScript (`.ts`)** (you pick the language up front).
 
 ```bash
-gitbulk init                       # interactive; writes ./gitbulk.config.yaml or ./gitbulk-change.mjs
+gitbulk init                       # interactive; writes ./gitbulk.config.yaml, ./gitbulk-change.mjs or .ts
 gitbulk init --output my.yaml      # choose the output path
 gitbulk init --force               # overwrite the output file without asking
 ```
 
-A typical session: pick operations one by one, fill in their fields, choose the export format,
-done. Then run the generated config as usual:
+A typical session: choose config or script (and its language), pick operations one by one, fill in
+their fields, done. Then run the generated config as usual:
 
 ```bash
 gitbulk --config gitbulk.config.yaml --dry-run
@@ -306,7 +311,7 @@ gitbulk [options]
   -v, --version          Print version and exit
   -h, --help             Show help
 
-gitbulk init [options]    Interactively generate a config or a standalone .mjs script
+gitbulk init [options]    Interactively generate a config or a standalone .mjs/.ts script
 
   -o, --output <path>    Output file path
   -f, --force            Overwrite the output file if it already exists
@@ -379,6 +384,10 @@ A `RunSummary` is printed at the end with per-repository outcomes and totals.
 - **Cross-platform scripts.** `.sh` scripts run via the platform shell (Git's bundled
   `sh.exe` is located automatically on Windows); `.bat`/`.cmd`, `.ps1`, and `.js`/`.mjs`
   scripts are dispatched to the appropriate interpreter.
+- **TypeScript scripts.** `.ts`/`.mts`/`.cts` scripts run via [`tsx`](https://tsx.is) when it is
+  installed in your project (`npm install -D tsx`, works on Node 20+), otherwise via Node's
+  built-in type stripping (Node ≥ 22.6). GitBulk does not ship `tsx` itself; on Node < 22.6
+  without `tsx` it fails with a clear message.
 - **Dry-run.** `--dry-run` performs all read-only steps and runs your script, but skips
   pushes and PR creation.
 - **Transient API failures** are retried with exponential backoff; permanent failures
