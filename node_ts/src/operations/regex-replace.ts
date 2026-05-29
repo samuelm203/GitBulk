@@ -80,6 +80,31 @@ const operation: Operation<RegexReplaceParams> = {
     writeFileSync(file, updated, 'utf8');
     return { changed: true, message: `Replaced pattern in ${params.path}` };
   },
+
+  generateScript(params: RegexReplaceParams): string {
+    const path = JSON.stringify(params.path);
+    const pattern = JSON.stringify(params.pattern);
+    const flags = JSON.stringify(params.flags);
+    const replacement = JSON.stringify(params.replacement);
+    const noMatch = params.requireMatch
+      ? `throw new Error('pattern did not match in ' + ${path});`
+      : `log('no match in ' + ${path});`;
+    return [
+      `const target = join(repoDir, ${path});`,
+      `if (!existsSync(target)) { log('no ' + ${path} + ' — skipping'); }`,
+      `else {`,
+      `  const re = new RegExp(${pattern}, ${flags});`,
+      `  const before = readFileSync(target, 'utf8');`,
+      `  if (!re.test(before)) { ${noMatch} }`,
+      `  else {`,
+      `    re.lastIndex = 0;`,
+      `    const after = before.replace(re, ${replacement});`,
+      `    if (after === before) log(${path} + ' unchanged after replace');`,
+      `    else { writeFileSync(target, after); log('replaced pattern in ' + ${path}); }`,
+      `  }`,
+      `}`,
+    ].join('\n');
+  },
 };
 
 registerOperation(operation);

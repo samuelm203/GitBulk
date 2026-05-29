@@ -51,6 +51,18 @@ const operation: Operation<ReplaceFileParams> = {
     writeFileSync(file, params.content, 'utf8');
     return { changed: true, message: `Replaced ${params.path}` };
   },
+
+  generateScript(params: ReplaceFileParams): string {
+    const path = JSON.stringify(params.path);
+    const content = JSON.stringify(params.content);
+    return [
+      `const target = join(repoDir, ${path});`,
+      `const content = ${content};`,
+      `if (!existsSync(target)) log('no ' + ${path} + ' — skipping');`,
+      `else if (readFileSync(target, 'utf8') === content) log(${path} + ' already up to date');`,
+      `else { writeFileSync(target, content); log('replaced ' + ${path}); }`,
+    ].join('\n');
+  },
 };
 
 registerOperation(operation);

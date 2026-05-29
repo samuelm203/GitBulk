@@ -74,6 +74,24 @@ export interface Operation<P = unknown> {
    * behandelt, aber sauberes Result-Reporting ist vorzuziehen.
    */
   apply(params: P, ctx: OperationContext): Promise<OperationResult> | OperationResult;
+  /**
+   * Optional: erzeugt den reinen-Node-Quelltext, der diese Operation in einem
+   * eigenständigen `.mjs`-Code-Change-Skript nachbildet (für `gitbulk init`,
+   * Skript-Modus).
+   *
+   * Rückgabe: ein oder mehrere JS-**Statements** (kein `import`!), die in einem
+   * eigenen Block ausgeführt werden. Im Skript verfügbar (vom Generator
+   * bereitgestellt):
+   *   - `repoDir` (string, = `process.cwd()`),
+   *   - die fs-Funktionen `existsSync`, `readFileSync`, `writeFileSync`,
+   *     `mkdirSync`, `rmSync`, `statSync`,
+   *   - die path-Funktionen `join`, `dirname`,
+   *   - `log(msg)` für Fortschrittsausgaben.
+   *
+   * Fehlt diese Methode, kann die Operation nur im Config-Modus generiert
+   * werden; der Skript-Generator weist dann darauf hin.
+   */
+  generateScript?(params: P): string;
 }
 
 /**

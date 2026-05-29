@@ -31,12 +31,24 @@ import { createPrAdapter, PrAdapterError } from '../git/pr-adapter.js';
 import { runBulk } from '../core/runner.js';
 import { printRunSummary } from '../core/reporter.js';
 import { runTui } from '../tui/index.js';
+import { runInitGenerator } from './init.js';
 import { VERSION } from '../index.js';
 
+/** Optionen des `init`-Subkommandos. */
+interface InitCommandOptions {
+  output?: string;
+  force?: boolean;
+}
+
 /**
- * Parst die CLI-Argumente und liefert die Commander-Program-Instanz.
+ * Baut die Commander-Program-Instanz inkl. `init`-Subkommando.
+ *
+ * @param onInit - Callback, der ausgeführt wird, wenn `gitbulk init` läuft.
+ *                 Bekommt die Subkommando-Optionen und die globalen Optionen.
  */
-function buildProgram(): Command {
+function buildProgram(
+  onInit: (cmdOpts: InitCommandOptions, globalOpts: { color: boolean }) => Promise<void>,
+): Command {
   const program = new Command();
 
   program
@@ -57,6 +69,15 @@ function buildProgram(): Command {
       'info',
     )
     .option('--no-color', 'Disable colored output');
+
+  program
+    .command('init')
+    .description('Interactively generate an operations config or a standalone .mjs code-change script')
+    .option('-o, --output <path>', 'Output file path')
+    .option('-f, --force', 'Overwrite the output file if it already exists', false)
+    .action(async (cmdOpts: InitCommandOptions) => {
+      await onInit(cmdOpts, program.opts<{ color: boolean }>());
+    });
 
   return program;
 }
@@ -92,8 +113,20 @@ function exitCodeFromSummary(summary: Awaited<ReturnType<typeof runBulk>>): numb
  * Hauptfunktion. Wirft NICHT — Fehler werden geloggt und Exit-Code wird gesetzt.
  */
 async function main(): Promise<number> {
-  const program = buildProgram();
-  program.parse(process.argv);
+  // `init`-Subkommando: läuft während parseAsync. Das Ergebnis fangen wir ab,
+  // damit der reguläre Bulk-Flow danach NICHT mehr ausgeführt wird.
+  let initResult: number | undefined;
+  const program = buildProgram(async (cmdOpts, globalOpts) => {
+    const initOpts: Parameters<typeof runInitGenerator>[0] = { noColor: !globalOpts.color };
+    if (cmdOpts.output !== undefined) initOpts.outputPath = cmdOpts.output;
+    if (cmdOpts.force !== undefined) initOpts.force = cmdOpts.force;
+    initResult = await runInitGenerator(initOpts);
+  });
+  await program.parseAsync(process.argv);
+  if (initResult !== undefined) {
+    return initResult;
+  }
+
   const opts = program.opts<{
     config?: string;
     mode: string;
