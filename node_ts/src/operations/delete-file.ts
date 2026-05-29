@@ -46,6 +46,16 @@ const operation: Operation<DeleteFileParams> = {
     rmSync(file);
     return { changed: true, message: `Deleted ${params.path}` };
   },
+
+  generateScript(params: DeleteFileParams): string {
+    const path = JSON.stringify(params.path);
+    return [
+      `const target = join(repoDir, ${path});`,
+      `if (!existsSync(target)) log(${path} + ' not present — nothing to delete');`,
+      `else if (statSync(target).isDirectory()) log(${path} + ' is a directory — skipped');`,
+      `else { rmSync(target); log('deleted ' + ${path}); }`,
+    ].join('\n');
+  },
 };
 
 registerOperation(operation);

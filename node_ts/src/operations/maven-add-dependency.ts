@@ -130,6 +130,43 @@ const operation: Operation<MavenAddDependencyParams> = {
       message: `Added ${params.groupId}:${params.artifactId}:${params.version}`,
     };
   },
+
+  generateScript(params: MavenAddDependencyParams): string {
+    const pomPath = JSON.stringify(params.pomPath);
+    const groupId = JSON.stringify(params.groupId);
+    const artifactId = JSON.stringify(params.artifactId);
+    const version = JSON.stringify(params.version);
+    const scope = params.scope !== undefined ? JSON.stringify(params.scope) : 'undefined';
+    return [
+      `const pomFile = join(repoDir, ${pomPath});`,
+      `const groupId = ${groupId}, artifactId = ${artifactId}, version = ${version}, scope = ${scope};`,
+      `if (!existsSync(pomFile)) { log('no ' + ${pomPath} + ' — skipping'); }`,
+      `else {`,
+      `  const xml = readFileSync(pomFile, 'utf8');`,
+      `  if (xml.includes('<artifactId>' + artifactId + '</artifactId>') && xml.includes('<groupId>' + groupId + '</groupId>')) {`,
+      `    log(groupId + ':' + artifactId + ' already present — skipping');`,
+      `  } else {`,
+      `    const openRe = /<dependencies\\s*>/g;`,
+      `    let m, closeIdx = -1;`,
+      `    while ((m = openRe.exec(xml)) !== null) {`,
+      `      const ci = xml.indexOf('</dependencies>', m.index);`,
+      `      if (ci === -1) continue;`,
+      `      const before = xml.slice(0, m.index);`,
+      `      if (before.lastIndexOf('<dependencyManagement>') <= before.lastIndexOf('</dependencyManagement>')) { closeIdx = ci; break; }`,
+      `    }`,
+      `    if (closeIdx === -1) throw new Error('no project-level <dependencies> block in ' + ${pomPath});`,
+      `    const lineStart = xml.lastIndexOf('\\n', closeIdx) + 1;`,
+      `    const closeIndent = (xml.slice(lineStart, closeIdx).match(/^\\s*/) || [''])[0];`,
+      `    const itemIndent = closeIndent + '  ', fieldIndent = closeIndent + '    ';`,
+      `    const lines = [itemIndent + '<dependency>', fieldIndent + '<groupId>' + groupId + '</groupId>', fieldIndent + '<artifactId>' + artifactId + '</artifactId>', fieldIndent + '<version>' + version + '</version>'];`,
+      `    if (scope) lines.push(fieldIndent + '<scope>' + scope + '</scope>');`,
+      `    lines.push(itemIndent + '</dependency>');`,
+      `    writeFileSync(pomFile, xml.slice(0, lineStart) + lines.join('\\n') + '\\n' + xml.slice(lineStart));`,
+      `    log('added ' + groupId + ':' + artifactId + ':' + version);`,
+      `  }`,
+      `}`,
+    ].join('\n');
+  },
 };
 
 registerOperation(operation);

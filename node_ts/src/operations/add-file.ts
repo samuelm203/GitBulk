@@ -59,6 +59,25 @@ const operation: Operation<AddFileParams> = {
     writeFileSync(file, params.content, 'utf8');
     return { changed: true, message: `Wrote ${params.path}` };
   },
+
+  generateScript(params: AddFileParams): string {
+    const path = JSON.stringify(params.path);
+    const content = JSON.stringify(params.content);
+    const overwrite = params.overwrite ? 'true' : 'false';
+    return [
+      `const target = join(repoDir, ${path});`,
+      `const content = ${content};`,
+      `if (existsSync(target)) {`,
+      `  if (readFileSync(target, 'utf8') === content) log(${path} + ' already up to date');`,
+      `  else if (!${overwrite}) log(${path} + ' exists — skipping (overwrite disabled)');`,
+      `  else { writeFileSync(target, content); log('overwrote ' + ${path}); }`,
+      `} else {`,
+      `  mkdirSync(dirname(target), { recursive: true });`,
+      `  writeFileSync(target, content);`,
+      `  log('wrote ' + ${path});`,
+      `}`,
+    ].join('\n');
+  },
 };
 
 registerOperation(operation);
