@@ -111,6 +111,23 @@ export function writeHangingNodeScript(workspace: string): string {
 }
 
 /**
+ * Installiert einen `pre-commit`-Hook im RU, der 30 s schläft (also hängt).
+ *
+ * Plattformneutral zuverlässig: Git führt Hooks über sein mitgeliefertes `sh`
+ * aus — auch auf Windows. Damit lässt sich der Timeout-/Kill-Pfad von `runGit`
+ * deterministisch testen (ein anschließendes `git commit` hängt im Hook), ohne
+ * vom plattformabhängigen `core.editor`-Verhalten abzuhängen.
+ *
+ * @param ruPath - Pfad zum (geklonten) Repository
+ * @returns Absoluter Pfad zum Hook
+ */
+export function writeHangingPreCommitHook(ruPath: string): string {
+  const hookPath = join(ruPath, '.git', 'hooks', 'pre-commit');
+  writeFileSync(hookPath, '#!/bin/sh\nsleep 30\n', { mode: 0o755 });
+  return hookPath;
+}
+
+/**
  * Schreibt ein Node-Skript (.mjs), das den gegebenen JS-Body ausführt.
  *
  * Plattformneutral: läuft über `resolveInterpreter` → `process.execPath`,
