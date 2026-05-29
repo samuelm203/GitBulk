@@ -253,45 +253,89 @@ export async function runGit(
       return;
     }
 
-    /**
-     * Killt git und alle Kinder plattformübergreifend (taskkill auf Windows,
-     * Prozessgruppen-Signal auf POSIX).
-     */
-    const killTree = (signal: NodeJS.Signals): void => {
-      if (child.killed || settled) return;
-      killProcessTree(child, signal);
-    };
-
     let stdout = '';
     let stderr = '';
     let timedOut = false;
     let settled = false;
+    let killRequested = false;
+    let graceHandle: NodeJS.Timeout | undefined;
 
-    // Optionaler externer Abbruch
-    const onAbort = (): void => {
-      if (!settled && !child.killed) {
-        logger.warn(`git ${previewArgs(fullArgs)} aborted via signal`);
-        killTree('SIGTERM');
+    /** Räumt Timer & Listener auf (genau einmal nötig). */
+    const cleanup = (): void => {
+      clearTimeout(timeoutHandle);
+      if (graceHandle) clearTimeout(graceHandle);
+      options.signal?.removeEventListener('abort', onAbort);
+      // `escalationHandle` wird BEWUSST nicht gecleared: der finale SIGKILL
+      // soll auch nach dem Auflösen noch hängende Enkel-Prozesse (die geerbte
+      // stdio-Pipes offenhalten) sicher einsammeln. Der Timer ist `unref`'d,
+      // blockiert also den Prozess-Exit nicht.
+    };
+
+    /** Löst das Promise genau einmal mit dem Endergebnis auf. */
+    const finalize = (exitCode: number | null, signal: NodeJS.Signals | null): void => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+
+      const result: GitCommandResult = {
+        exitCode,
+        signal,
+        stdout,
+        stderr,
+        durationMs: Date.now() - startedAt,
+        timedOut,
+        args: fullArgs,
+        cwd: options.cwd,
+      };
+
+      if (timedOut) {
+        logger.warn(
+          `git ${previewArgs(fullArgs)} killed (timeout), exit=${exitCode ?? signal ?? 'n/a'}`,
+        );
+      } else if (exitCode !== 0) {
+        logger.debug(
+          `git ${previewArgs(fullArgs)} exited with ${exitCode ?? signal ?? 'n/a'} in ${result.durationMs}ms`,
+        );
       }
+
+      resolve(result);
+    };
+
+    /**
+     * Killt git samt Kindern (taskkill auf Windows, Prozessgruppen-Signal auf
+     * POSIX) und eskaliert nach kurzer Frist auf SIGKILL, falls SIGTERM
+     * ignoriert wird. Mehrfachaufrufe sind no-ops.
+     */
+    const killTree = (): void => {
+      if (settled || killRequested) return;
+      killRequested = true;
+      killProcessTree(child, 'SIGTERM');
+      // Nach kurzer Frist hart nachfassen — unabhängig davon, ob das Promise
+      // bereits (via `exit`-Gnadenfrist) aufgelöst wurde. So werden hängende
+      // Enkel-Prozesse zuverlässig beendet statt 30 s weiterzulaufen. Ein
+      // SIGKILL an einen bereits toten Baum ist ein harmloser No-op. Der
+      // Timer ist `unref`'d, blockiert also den Prozess-Exit nicht.
+      setTimeout(() => {
+        killProcessTree(child, 'SIGKILL');
+      }, 1500).unref();
+    };
+
+    // Optionaler externer Abbruch (z. B. Ctrl+C)
+    const onAbort = (): void => {
+      if (settled) return;
+      logger.warn(`git ${previewArgs(fullArgs)} aborted via signal`);
+      killTree();
     };
     options.signal?.addEventListener('abort', onAbort, { once: true });
 
     // Timeout-Handling
     const timeoutHandle = setTimeout(() => {
-      if (!settled && !child.killed) {
-        timedOut = true;
-        logger.warn(
-          `git ${previewArgs(fullArgs)} timed out after ${options.timeoutMs}ms (cwd=${options.cwd})`,
-        );
-        // Erst SIGTERM für sauberen Shutdown, dann SIGKILL als Eskalation,
-        // falls die Prozessgruppe SIGTERM ignoriert (z. B. hängende Sub-Prozesse).
-        killTree('SIGTERM');
-        setTimeout(() => {
-          if (!settled && !child.killed) {
-            killTree('SIGKILL');
-          }
-        }, 2000).unref();
-      }
+      if (settled) return;
+      timedOut = true;
+      logger.warn(
+        `git ${previewArgs(fullArgs)} timed out after ${options.timeoutMs}ms (cwd=${options.cwd})`,
+      );
+      killTree();
     }, options.timeoutMs);
     timeoutHandle.unref();
 
@@ -320,39 +364,24 @@ export async function runGit(
     child.on('error', (err) => {
       if (settled) return;
       settled = true;
-      clearTimeout(timeoutHandle);
-      options.signal?.removeEventListener('abort', onAbort);
+      cleanup();
       reject(new GitExecutorError(`git process error: ${err.message}`, err));
     });
 
+    // `exit` feuert, sobald der git-Prozess SELBST beendet ist; `close` erst,
+    // wenn zusätzlich alle stdio-Pipes geschlossen sind. Im Normalfall warten
+    // wir auf `close` (vollständige Ausgabe). Haben wir aber aktiv gekillt,
+    // kann ein hängender Enkel-Prozess (Editor/Hook/Credential-Helper) die
+    // geerbten Pipes offenhalten → `close` würde dann ewig ausbleiben. Daher:
+    // nach einem Kill via `exit` + kurzer Gnadenfrist auflösen.
+    child.on('exit', (exitCode, signal) => {
+      if (settled || !killRequested || graceHandle) return;
+      graceHandle = setTimeout(() => finalize(exitCode, signal), 300);
+      graceHandle.unref();
+    });
+
     child.on('close', (exitCode, signal) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timeoutHandle);
-      options.signal?.removeEventListener('abort', onAbort);
-
-      const result: GitCommandResult = {
-        exitCode,
-        signal,
-        stdout,
-        stderr,
-        durationMs: Date.now() - startedAt,
-        timedOut,
-        args: fullArgs,
-        cwd: options.cwd,
-      };
-
-      if (timedOut) {
-        logger.warn(
-          `git ${previewArgs(fullArgs)} killed (timeout), exit=${exitCode ?? signal ?? 'n/a'}`,
-        );
-      } else if (exitCode !== 0) {
-        logger.debug(
-          `git ${previewArgs(fullArgs)} exited with ${exitCode ?? signal ?? 'n/a'} in ${result.durationMs}ms`,
-        );
-      }
-
-      resolve(result);
+      finalize(exitCode, signal);
     });
   });
 }
