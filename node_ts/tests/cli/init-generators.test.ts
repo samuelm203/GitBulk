@@ -2,7 +2,7 @@
  * Tests für die reine Logik hinter `gitbulk init`:
  *   - operation-introspect (Parameter aus Zod-Schemas ableiten)
  *   - config-generator (YAML, die gegen das echte Schema validiert)
- *   - script-generator (erzeugt ein .mjs, das WIRKLICH die Operationen ausführt)
+ *   - script-generator (erzeugt .mjs/.ts, die WIRKLICH die Operationen ausführen)
  *
  * Der interaktive readline-Teil (init.ts) wird hier bewusst nicht getestet;
  * die gesamte testbare Logik liegt in den hier geprüften Modulen.
@@ -19,7 +19,7 @@ import { parse as parseYaml } from 'yaml';
 
 import { getOperation } from '../../src/operations/index.js';
 import { describeOperationParams } from '../../src/cli/operation-introspect.js';
-import { generateMjsScript } from '../../src/cli/script-generator.js';
+import { generateScript } from '../../src/cli/script-generator.js';
 import { generateYamlConfig, buildConfigObject } from '../../src/cli/config-generator.js';
 import { GitBulkConfigSchema } from '../../src/config/schema.js';
 
@@ -95,7 +95,7 @@ describe('config-generator', () => {
 
 describe('script-generator', () => {
   it('reports unsupported operation types', () => {
-    const { unsupported } = generateMjsScript([{ type: 'does-not-exist', params: {} }]);
+    const { unsupported } = generateScript([{ type: 'does-not-exist', params: {} }]);
     assert.deepEqual(unsupported, ['does-not-exist']);
   });
 
@@ -121,7 +121,7 @@ describe('script-generator', () => {
     writeFileSync(join(ws, 'old.txt'), 'remove me');
     writeFileSync(join(ws, 'version.txt'), 'version=1');
 
-    const { code, unsupported } = generateMjsScript([
+    const { code, unsupported } = generateScript([
       { type: 'add-file', params: { path: 'src/New.java', content: 'class New {}', overwrite: false } },
       { type: 'replace-file', params: { path: 'version.txt', content: 'version=2' } },
       { type: 'delete-file', params: { path: 'old.txt' } },
@@ -157,7 +157,7 @@ describe('script-generator', () => {
     const ws = mkdtempSync(join(tmpdir(), 'gitbulk-gen2-'));
     writeFileSync(join(ws, 'a.txt'), 'orig');
 
-    const { code } = generateMjsScript([
+    const { code } = generateScript([
       { type: 'add-file', params: { path: 'a.txt', content: 'new', overwrite: false } },
     ]);
     const scriptPath = join(ws, 'change.mjs');
@@ -167,5 +167,36 @@ describe('script-generator', () => {
     const r1 = spawnSync(process.execPath, [scriptPath], { cwd: ws, encoding: 'utf8' });
     assert.equal(r1.status, 0);
     assert.equal(readFileSync(join(ws, 'a.txt'), 'utf8'), 'orig');
+  });
+
+  it('generates a TypeScript (.ts) script that runs via tsx', () => {
+    const ws = mkdtempSync(join(tmpdir(), 'gitbulk-gents-'));
+    writeFileSync(join(ws, 'version.txt'), 'version=1');
+
+    const { code, unsupported } = generateScript(
+      [
+        { type: 'add-file', params: { path: 'created.ts', content: 'export const x = 1;', overwrite: false } },
+        { type: 'replace-file', params: { path: 'version.txt', content: 'version=2' } },
+      ],
+      'ts',
+    );
+    assert.deepEqual(unsupported, []);
+    // Präambel enthält TS-Typsyntax
+    assert.match(code, /const repoDir: string/);
+    assert.match(code, /msg: string\): void/);
+
+    const scriptPath = join(ws, 'change.ts');
+    writeFileSync(scriptPath, code);
+
+    // Portabel über alle CI-Node-Versionen: tsx absolut auflösen (GitBulks
+    // eigene devDependency) und via --import laden; cwd = das Test-Repo.
+    const tsxUrl = import.meta.resolve('tsx');
+    const r = spawnSync(process.execPath, ['--import', tsxUrl, scriptPath], {
+      cwd: ws,
+      encoding: 'utf8',
+    });
+    assert.equal(r.status, 0, `ts script failed: ${r.stderr}`);
+    assert.equal(readFileSync(join(ws, 'created.ts'), 'utf8'), 'export const x = 1;');
+    assert.equal(readFileSync(join(ws, 'version.txt'), 'utf8'), 'version=2');
   });
 });

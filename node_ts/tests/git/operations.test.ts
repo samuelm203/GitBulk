@@ -315,6 +315,16 @@ describe('resolveInterpreter', () => {
     }
   });
 
+  it('uses tsx for .ts/.mts/.cts when tsx is resolvable from the cwd', () => {
+    // Das node_ts-Projekt hat tsx als devDependency → vom Projekt-CWD auflösbar.
+    for (const ext of ['.ts', '.mts', '.cts']) {
+      const { command, prefixArgs } = resolveInterpreter(`script${ext}`, process.cwd());
+      assert.equal(command, process.execPath);
+      assert.ok(prefixArgs.includes('--import'), `${ext}: expected --import`);
+      assert.ok(prefixArgs.includes('tsx'), `${ext}: expected tsx`);
+    }
+  });
+
   it('marks unknown extensions for direct execution', () => {
     const { command, prefixArgs } = resolveInterpreter('/usr/local/bin/mytool');
     assert.equal(command, '/usr/local/bin/mytool');

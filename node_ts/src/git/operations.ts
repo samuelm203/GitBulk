@@ -17,6 +17,7 @@
 import { existsSync, statSync } from 'node:fs';
 import { join, extname } from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
+import { createRequire } from 'node:module';
 
 import { runGit, runGitChecked, killProcessTree, type GitCommandResult } from './executor.js';
 import type { Logger } from '../utils/logger.js';
@@ -330,6 +331,70 @@ function spawnSyncSafe(command: string, args: string[]): string | null {
 let cachedWindowsShell: string | null = null;
 
 /**
+ * Cache für die tsx-Verfügbarkeit pro Repo-Verzeichnis (require.resolve kostet I/O).
+ */
+const tsxAvailabilityCache = new Map<string, boolean>();
+
+/**
+ * Prüft, ob `tsx` aus dem NUTZER-Repo (`cwd`) auflösbar ist.
+ *
+ * Bewusst aus `cwd` (nicht aus GitBulks eigenen node_modules): GitBulk liefert
+ * tsx NICHT aus, sondern nutzt es nur als devDependency für eigene Tests. So
+ * bleibt das Tool dependency-frei und der Nutzer entscheidet, ob er tsx bereitstellt.
+ */
+function isTsxAvailable(cwd: string): boolean {
+  const cached = tsxAvailabilityCache.get(cwd);
+  if (cached !== undefined) return cached;
+  let available = false;
+  try {
+    // Anker-Datei muss nicht existieren — die Auflösung startet bei cwd/node_modules.
+    createRequire(join(cwd, 'package.json')).resolve('tsx');
+    available = true;
+  } catch {
+    available = false;
+  }
+  tsxAvailabilityCache.set(cwd, available);
+  return available;
+}
+
+/**
+ * Liefert die Node-Flags für eingebautes TypeScript-Type-Stripping, oder `null`,
+ * wenn die laufende Node-Version es nicht unterstützt (< 22.6).
+ *
+ *   - Node 22.6 – 23.5 → `--experimental-strip-types` nötig.
+ *   - Node ≥ 23.6      → standardmäßig an, kein Flag (vermeidet Deprecation-Warnung).
+ */
+function nativeStripTypesArgs(): string[] | null {
+  const [maj = 0, min = 0] = process.versions.node.split('.').map((n) => Number(n));
+  const supported = maj > 22 || (maj === 22 && min >= 6);
+  if (!supported) return null;
+  const needsFlag = maj < 23 || (maj === 23 && min < 6);
+  return needsFlag ? ['--experimental-strip-types'] : [];
+}
+
+/**
+ * Wählt die Runtime für ein `.ts`/`.mts`/`.cts`-Skript (Auto-Erkennung).
+ *
+ * Reihenfolge: tsx aus dem Nutzer-Repo → Nodes eingebautes Type-Stripping
+ * (Node ≥ 22.6) → klarer Fehler. Bei tsx wird der bare Specifier `tsx` an
+ * `--import` übergeben; der Kind-Node-Prozess löst ihn relativ zu seinem
+ * `cwd` (= Repo) auf, also genau dort, wo wir die Verfügbarkeit geprüft haben.
+ */
+function resolveTsRuntime(cwd: string): { command: string; prefixArgs: string[] } {
+  if (isTsxAvailable(cwd)) {
+    return { command: process.execPath, prefixArgs: ['--import', 'tsx'] };
+  }
+  const native = nativeStripTypesArgs();
+  if (native !== null) {
+    return { command: process.execPath, prefixArgs: native };
+  }
+  throw new Error(
+    'To run TypeScript scripts on Node < 22.6, please install tsx in your project ' +
+      '(npm install -D tsx) or upgrade to Node >= 22.6.',
+  );
+}
+
+/**
  * Wählt den passenden Interpreter, um ein Skript plattformübergreifend
  * auszuführen.
  *
@@ -344,13 +409,22 @@ let cachedWindowsShell: string | null = null;
  *   - `.bat` / `.cmd`  → über `cmd.exe /c` (nur Windows sinnvoll).
  *   - `.ps1`           → über `powershell -File` (Windows) bzw. `pwsh` (POSIX).
  *   - `.js` / `.mjs`   → über `process.execPath` (Node selbst).
+ *   - `.ts` / `.mts` / `.cts` → über tsx (aus dem Repo) oder Nodes eingebautes
+ *                        Type-Stripping (siehe `resolveTsRuntime`).
  *   - sonst            → direkt ausführen und auf Shebang/Datei-Assoziation
  *                        vertrauen (POSIX-Skripte ohne Endung etc.).
  *
  * Rückgabe: `{ command, prefixArgs }`. Der eigentliche Aufruf ist dann
  * `spawn(command, [...prefixArgs, scriptPath], ...)`.
+ *
+ * @param scriptPath - Pfad zum Skript.
+ * @param cwd        - Arbeitsverzeichnis des Skripts (Repo). Nur für die
+ *                     tsx-Auflösung von `.ts`-Skripten relevant.
  */
-export function resolveInterpreter(scriptPath: string): {
+export function resolveInterpreter(
+  scriptPath: string,
+  cwd: string = process.cwd(),
+): {
   command: string;
   prefixArgs: string[];
 } {
@@ -384,6 +458,12 @@ export function resolveInterpreter(scriptPath: string): {
       // Auf Windows ist eine .mjs Datei nicht direkt ausführbar.
       // Wir verwenden process.execPath für den absoluten Pfad zur node.exe.
       return { command: process.execPath, prefixArgs: [] };
+    case '.ts':
+    case '.mts':
+    case '.cts':
+      // TypeScript: tsx (aus dem Repo) oder Nodes Type-Stripping; wirft mit
+      // klarer Meldung, wenn weder tsx noch eine geeignete Node-Version da ist.
+      return resolveTsRuntime(cwd);
     default:
       // Ohne bekannte Endung: direkt ausführen (POSIX-Shebang) — auf Windows
       // wird das fehlschlagen, aber dann ist das ein bewusstes User-Setup.
@@ -443,7 +523,8 @@ export async function executeCodeChange(
     let settled = false;
 
     // Plattformübergreifenden Interpreter wählen (Windows kennt keine Shebangs).
-    const { command, prefixArgs } = resolveInterpreter(scriptPath);
+    // base.cwd wird für die tsx-Auflösung von .ts-Skripten benötigt.
+    const { command, prefixArgs } = resolveInterpreter(scriptPath, base.cwd);
     // Sonderfall "__SELF__": Skript direkt ausführen (command IST der scriptPath,
     // keine zusätzlichen Argumente). Sonst: command + prefixArgs + scriptPath.
     const isSelfExec = prefixArgs[0] === '__SELF__';

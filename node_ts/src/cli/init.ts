@@ -29,8 +29,20 @@ import {
 } from '../utils/validators.js';
 import { describeOperationParams, type ParamSpec } from './operation-introspect.js';
 import { promptUntilValid } from './prompts.js';
-import { generateMjsScript, type ScriptOperation } from './script-generator.js';
+import {
+  generateScript,
+  type ScriptOperation,
+  type ScriptLanguage,
+} from './script-generator.js';
 import { generateYamlConfig } from './config-generator.js';
+
+/** Validator für eine "1 oder 2"-Auswahl (für die Eingangsfragen). */
+function chooseOneOrTwo(raw: string): { ok: true; value: '1' | '2' } | { ok: false; error: string } {
+  const t = raw.trim();
+  return t === '1' || t === '2'
+    ? { ok: true, value: t }
+    : { ok: false, error: 'Please enter 1 or 2.' };
+}
 
 export interface InitOptions {
   /** Optionaler Ausgabepfad (sonst Default je nach Modus oder Prompt). */
@@ -207,31 +219,35 @@ export async function runInitGenerator(opts: InitOptions = {}): Promise<number> 
   const rl = createInterface({ input, output });
 
   try {
-    output.write(chalk.bold('\n━━━ GitBulk init — operation generator ━━━\n'));
-    output.write(
-      chalk.gray('Click together a chain of operations, then export as config or a .mjs script.\n'),
-    );
+    output.write(chalk.bold('\n━━━ GitBulk init — code-change generator ━━━\n'));
 
     if (listOperations().length === 0) {
       process.stderr.write(chalk.red('No operations are registered.\n'));
       return 3;
     }
 
+    // ── 1) Art des Code-Change zuerst wählen ─────────────────────
+    output.write(chalk.bold('\nWhat do you want to create?\n'));
+    output.write(`  ${chalk.green('1')}. A config with declarative operations (YAML)\n`);
+    output.write(`  ${chalk.green('2')}. A standalone code-change script\n`);
+    const kind = await promptUntilValid(rl, 'Choose (1/2):', chooseOneOrTwo);
+
+    // ── 2) Bei Skript: Sprache wählen ────────────────────────────
+    let language: ScriptLanguage = 'js';
+    if (kind === '2') {
+      output.write(chalk.bold('\nScript language?\n'));
+      output.write(`  ${chalk.green('1')}. JavaScript (.mjs)\n`);
+      output.write(`  ${chalk.green('2')}. TypeScript (.ts)\n`);
+      const lang = await promptUntilValid(rl, 'Choose (1/2):', chooseOneOrTwo);
+      language = lang === '2' ? 'ts' : 'js';
+    }
+
+    // ── 3) Operationen zusammenstellen ───────────────────────────
     const operations = await collectOperations(rl);
 
-    // ── Ausgabemodus wählen ──────────────────────────────────────
-    output.write(chalk.bold('\nHow do you want to export?\n'));
-    output.write(`  ${chalk.green('1')}. YAML config (operations block + required fields)\n`);
-    output.write(`  ${chalk.green('2')}. Standalone .mjs code-change script\n`);
-    const mode = await promptUntilValid(rl, 'Choose (1/2):', (raw) => {
-      const t = raw.trim();
-      return t === '1' || t === '2'
-        ? { ok: true as const, value: t }
-        : { ok: false as const, error: 'Please enter 1 or 2.' };
-    });
-
-    if (mode === '2') {
-      return await exportScript(rl, opts, operations);
+    // ── 4) Exportieren ───────────────────────────────────────────
+    if (kind === '2') {
+      return await exportScript(rl, opts, operations, language);
     }
     return await exportConfig(rl, opts, operations);
   } finally {
@@ -239,14 +255,15 @@ export async function runInitGenerator(opts: InitOptions = {}): Promise<number> 
   }
 }
 
-/** Schreibt das `.mjs`-Skript. */
+/** Schreibt das generierte Code-Change-Skript (.mjs oder .ts). */
 async function exportScript(
   rl: Interface,
   opts: InitOptions,
   operations: CollectedOp[],
+  language: ScriptLanguage,
 ): Promise<number> {
   const scriptOps: ScriptOperation[] = operations.map((o) => ({ type: o.type, params: o.params }));
-  const { code, unsupported } = generateMjsScript(scriptOps);
+  const { code, unsupported } = generateScript(scriptOps, language);
 
   if (unsupported.length > 0) {
     process.stderr.write(
@@ -257,12 +274,18 @@ async function exportScript(
     );
   }
 
-  const target = await resolveOutputPath(rl, opts, 'gitbulk-change.mjs');
+  const defaultName = language === 'ts' ? 'gitbulk-change.ts' : 'gitbulk-change.mjs';
+  const target = await resolveOutputPath(rl, opts, defaultName);
   if (!target) return 3;
 
   writeFileSync(target, code, { mode: 0o755 });
   output.write(chalk.green(`\n✓ Wrote standalone script: ${target}\n`));
   output.write(chalk.gray(`  Use it via the "script" field in your config, then edit freely.\n`));
+  if (language === 'ts') {
+    output.write(
+      chalk.gray('  TypeScript runs via tsx (npm i -D tsx) or Node >= 22.6 automatically.\n'),
+    );
+  }
   return 0;
 }
 
