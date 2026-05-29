@@ -173,6 +173,63 @@ describe('GitBulkConfigSchema', () => {
   });
 });
 
+describe('GitBulkConfigSchema - operations vs script', () => {
+  const validMaven = {
+    type: 'maven-add-dependency',
+    groupId: 'org.apache.commons',
+    artifactId: 'commons-lang3',
+    version: '3.14.0',
+  };
+
+  it('accepts a config with operations instead of script', () => {
+    const result = GitBulkConfigSchema.safeParse(
+      validConfig({ script: undefined, operations: [validMaven] }),
+    );
+    assert.equal(result.success, true);
+  });
+
+  it('rejects a config with neither script nor operations', () => {
+    const result = GitBulkConfigSchema.safeParse(validConfig({ script: undefined }));
+    assert.equal(result.success, false);
+  });
+
+  it('rejects a config with an empty operations list (and no script)', () => {
+    const result = GitBulkConfigSchema.safeParse(
+      validConfig({ script: undefined, operations: [] }),
+    );
+    assert.equal(result.success, false);
+  });
+
+  it('rejects a config with both script and operations', () => {
+    const result = GitBulkConfigSchema.safeParse(validConfig({ operations: [validMaven] }));
+    assert.equal(result.success, false);
+  });
+
+  it('rejects an unknown operation type', () => {
+    const result = GitBulkConfigSchema.safeParse(
+      validConfig({ script: undefined, operations: [{ type: 'does-not-exist' }] }),
+    );
+    assert.equal(result.success, false);
+    if (!result.success) {
+      assert.ok(result.error.issues.some((i) => /unknown operation type/.test(i.message)));
+    }
+  });
+
+  it('validates operation parameters against the registered schema', () => {
+    const result = GitBulkConfigSchema.safeParse(
+      validConfig({
+        script: undefined,
+        // groupId fehlt → maven-Schema schlägt fehl
+        operations: [{ type: 'maven-add-dependency', artifactId: 'x', version: '1' }],
+      }),
+    );
+    assert.equal(result.success, false);
+    if (!result.success) {
+      assert.ok(result.error.issues.some((i) => i.path.includes('operations')));
+    }
+  });
+});
+
 describe('PartialGitBulkConfigSchema', () => {
   it('accepts a config with only some fields', () => {
     const result = PartialGitBulkConfigSchema.safeParse({
