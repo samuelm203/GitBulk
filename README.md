@@ -264,6 +264,9 @@ is opened and the feature branch is deleted.
 | `delete-file`          | Delete a file (no-op if already gone).               | `path`                                                                         |
 | `regex-replace`        | Search & replace via a regular expression.           | `path`, `pattern`, `replacement`, `flags` (default `g`), `requireMatch`        |
 | `maven-add-dependency` | Add a dependency to the first project-level `<dependencies>` block (skips `<dependencyManagement>`); no-op if group+artifact already present. | `groupId`, `artifactId`, `version`, `scope`, `pomPath` (default `pom.xml`) |
+| `npm-add-dependency`   | Add a dependency to `package.json` (no-op if already present). | `name`, `version`, `field` (`dependencies`\|`devDependencies`\|`peerDependencies`, default `dependencies`), `packagePath` (default `package.json`) |
+| `npm-update`           | Update the version of an existing dependency in `package.json` (searches all dependency fields). | `name`, `version`, `packagePath` (default `package.json`) |
+| `json-patch`           | Set a value at a dot-path in a JSON file (creates intermediate objects). The value is parsed as JSON when possible (`true`, `42`, `"x"`), else used as a raw string. | `path`, `pointer` (e.g. `scripts.build`), `value` |
 
 Paths are always relative to the repository and may not escape it (no absolute paths, no `..`).
 The list of operations and their parameters is also available interactively via `gitbulk init`.

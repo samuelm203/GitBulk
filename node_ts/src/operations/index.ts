@@ -15,6 +15,9 @@ import './add-file.js';
 import './replace-file.js';
 import './delete-file.js';
 import './regex-replace.js';
+import './npm-add-dependency.js';
+import './npm-update.js';
+import './json-patch.js';
 
 // Re-Export der Registry-API für bequemen Zugriff.
 export {
