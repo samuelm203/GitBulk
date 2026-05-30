@@ -47,7 +47,7 @@ function asZodCheck<T>(
  * Aktuell implementiert: Bitbucket.
  * Vorbereitet (Adapter-Interface, Implementierung folgt): Azure DevOps.
  */
-export const PrPlatformSchema = z.enum(['bitbucket', 'azure-devops']);
+export const PrPlatformSchema = z.enum(['bitbucket', 'azure-devops', 'github']);
 export type PrPlatform = z.infer<typeof PrPlatformSchema>;
 
 /**
@@ -86,6 +86,24 @@ export const AzureDevOpsConfigSchema = z.object({
   reviewers: z.array(z.string().min(1)).default([]),
 });
 export type AzureDevOpsConfig = z.infer<typeof AzureDevOpsConfigSchema>;
+
+/**
+ * GitHub-spezifische PR-Konfiguration.
+ *
+ * Token wird *nicht* in der Datei erwartet — er wird via Env-Variable
+ * (`GITBULK_GITHUB_TOKEN`) gelesen.
+ */
+export const GitHubConfigSchema = z.object({
+  /** Repository-Owner (User oder Organisation), z. B. "my-org". */
+  owner: z.string().min(1, 'GitHub owner must not be empty'),
+  /** Ziel-Branch für die PRs (Default: `main`). */
+  targetBranch: z.string().min(1).default('main'),
+  /** Optionale API-Basis-URL für GitHub Enterprise (z. B. `https://ghe.example.com/api/v3`). */
+  apiBaseUrl: z.string().url().optional(),
+  /** Optionale Reviewer (GitHub-Logins). */
+  reviewers: z.array(z.string().min(1)).default([]),
+});
+export type GitHubConfig = z.infer<typeof GitHubConfigSchema>;
 
 /**
  * Retry-Verhalten beim `git push` (Flowchart: `Counter < 3` + `Sleep (Backoff)`).
@@ -264,6 +282,9 @@ export const GitBulkConfigSchema = z
 
     /** Azure-DevOps-spezifische Settings (Pflicht wenn prPlatform === 'azure-devops') */
     azureDevOps: AzureDevOpsConfigSchema.optional(),
+
+    /** GitHub-spezifische Settings (Pflicht wenn prPlatform === 'github') */
+    github: GitHubConfigSchema.optional(),
   })
   // Cross-Field-Validierung: passende Sub-Config muss vorhanden sein.
   .superRefine((config, ctx) => {
@@ -279,6 +300,13 @@ export const GitBulkConfigSchema = z
         code: z.ZodIssueCode.custom,
         path: ['azureDevOps'],
         message: 'azureDevOps config is required when prPlatform is "azure-devops"',
+      });
+    }
+    if (config.prPlatform === 'github' && !config.github) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['github'],
+        message: 'github config is required when prPlatform is "github"',
       });
     }
     if (config.cloneIfMissing && !config.cloneBaseUrl) {

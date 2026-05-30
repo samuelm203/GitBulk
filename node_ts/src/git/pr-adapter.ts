@@ -126,6 +126,19 @@ export async function createPrAdapter(config: GitBulkConfig): Promise<PullReques
       const { BitbucketPrAdapter } = await import('./pr-bitbucket.js');
       return new BitbucketPrAdapter(config.bitbucket, token);
     }
+    case 'github': {
+      if (!config.github) {
+        throw new PrAdapterError('prPlatform=github but no github config present');
+      }
+      const token = process.env.GITBULK_GITHUB_TOKEN;
+      if (!token || token.trim().length === 0) {
+        throw new PrAdapterError(
+          'Environment variable GITBULK_GITHUB_TOKEN is required for GitHub PR creation',
+        );
+      }
+      const { GitHubPrAdapter } = await import('./pr-github.js');
+      return new GitHubPrAdapter(config.github, token);
+    }
     case 'azure-devops': {
       // Platzhalter — Implementierung folgt nach Bitbucket.
       throw new PrAdapterError(

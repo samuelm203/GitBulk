@@ -48,8 +48,8 @@ error handling so that a failure in one repository never derails the rest of the
   anything changed. No scripting required.
 - **Interactive generator** (`gitbulk init`) that walks you through the available operations
   and writes either a ready-to-run config or a standalone, editable `.mjs`/`.ts` script.
-- **Pull-request automation** for Bitbucket (Cloud and Server). The adapter layer is
-  extensible for additional platforms.
+- **Pull-request automation** for Bitbucket (Cloud and Server) and GitHub (incl. Enterprise).
+  The adapter layer is extensible for additional platforms.
 - **Automatic retries** with exponential backoff on transient API failures.
 - **Robust error handling**: per-repository isolation, timeouts with full process-tree
   termination, and graceful abort on `Ctrl+C`.
@@ -177,13 +177,21 @@ commandTimeoutMs: 120000        # per-git-command timeout
 dryRun: false
 skipHooks: false                # pass --no-verify to git
 
-# Pull-request platform
+# Pull-request platform — "bitbucket" or "github"
 prPlatform: bitbucket
 bitbucket:
   workspace: my-workspace
   apiVariant: cloud             # "cloud" or "server"
   targetBranch: master
   reviewers: []
+
+# For GitHub, use prPlatform: github and a github block instead:
+# prPlatform: github
+# github:
+#   owner: my-org               # user or organization
+#   targetBranch: main
+#   reviewers: []               # GitHub logins
+#   # apiBaseUrl: https://ghe.example.com/api/v3   # GitHub Enterprise only
 ```
 
 ### Field reference
@@ -206,7 +214,9 @@ bitbucket:
 | `commandTimeoutMs`| no       | Timeout per git command (ms).                                      |
 | `dryRun`          | no       | Skip all write operations (push, PR API).                          |
 | `skipHooks`       | no       | Bypass git hooks (`--no-verify`).                                  |
-| `prPlatform`      | no       | PR platform. Currently `bitbucket`.                                |
+| `prPlatform`      | no       | PR platform: `bitbucket` or `github`.                              |
+| `bitbucket`       | cond.    | Bitbucket settings (required when `prPlatform: bitbucket`). Token from `GITBULK_BITBUCKET_TOKEN`. |
+| `github`          | cond.    | GitHub settings: `owner`, `targetBranch` (default `main`), `reviewers`, optional `apiBaseUrl` (Enterprise). Required when `prPlatform: github`. Token from `GITBULK_GITHUB_TOKEN`. |
 
 See the [`node_ts/examples/`](./node_ts/examples) directory for ready-to-copy configs (YAML,
 JSON, JS, TS), a declarative-operations config (`gitbulk.operations.yaml`), and example
@@ -296,8 +306,8 @@ their fields, done. Then run the generated config as usual:
 gitbulk --config gitbulk.config.yaml --dry-run
 ```
 
-> The Bitbucket token is never written to the config — it is read at runtime from the
-> `GITBULK_BITBUCKET_TOKEN` environment variable.
+> The API token is never written to the config — it is read at runtime from an environment
+> variable: `GITBULK_BITBUCKET_TOKEN` for Bitbucket, `GITBULK_GITHUB_TOKEN` for GitHub.
 
 ---
 
