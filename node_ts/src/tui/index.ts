@@ -23,6 +23,7 @@ import { printRunSummary } from '../core/reporter.js';
 import { detectGit } from '../git/executor.js';
 import { createLogger, setDefaultLogger } from '../utils/logger.js';
 import { TuiRenderer, type TuiRuRow, type TuiRuStatus } from './render.js';
+import { filterRus } from '../cli/filter-rus.js';
 
 /**
  * Optionen für den TUI-Lauf.
@@ -36,6 +37,8 @@ export interface TuiOptions {
   dryRun?: boolean;
   /** Farben deaktivieren. */
   noColor?: boolean;
+  /** RU-Filter (komma-separierte Teilmenge), entspricht `--only`. */
+  only?: string;
   /** AbortSignal (z. B. Ctrl+C). */
   signal?: AbortSignal;
 }
@@ -120,6 +123,14 @@ export async function runTui(options: TuiOptions = {}): Promise<number> {
   // Dry-Run-Override (Config ist frozen → flache Kopie).
   if (options.dryRun && !config.dryRun) {
     config = Object.freeze({ ...config, dryRun: true });
+  }
+
+  // --only: RU-Liste auf eine Teilmenge beschränken.
+  try {
+    config = filterRus(config, options.only);
+  } catch (err) {
+    writeErr(`Error: ${(err as Error).message}`);
+    return 3;
   }
 
   // ── PR-Adapter ─────────────────────────────────────────────────

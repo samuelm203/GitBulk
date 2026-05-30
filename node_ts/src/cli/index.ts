@@ -32,6 +32,8 @@ import { runBulk } from '../core/runner.js';
 import { printRunSummary } from '../core/reporter.js';
 import { runTui } from '../tui/index.js';
 import { runInitGenerator } from './init.js';
+import { runListOperations } from './list-operations.js';
+import { filterRus } from './filter-rus.js';
 import { VERSION } from '../index.js';
 
 /** Optionen des `init`-Subkommandos. */
@@ -40,15 +42,26 @@ interface InitCommandOptions {
   force?: boolean;
 }
 
+/** Optionen des `list-operations`-Subkommandos. */
+interface ListOperationsCommandOptions {
+  json?: boolean;
+}
+
+/** Callbacks für die Subkommandos (setzen jeweils das Subkommando-Ergebnis). */
+interface SubcommandHandlers {
+  onInit: (cmdOpts: InitCommandOptions, globalOpts: { color: boolean }) => Promise<void>;
+  onListOperations: (
+    cmdOpts: ListOperationsCommandOptions,
+    globalOpts: { color: boolean },
+  ) => void;
+}
+
 /**
- * Baut die Commander-Program-Instanz inkl. `init`-Subkommando.
+ * Baut die Commander-Program-Instanz inkl. `init`- und `list-operations`-Subkommandos.
  *
- * @param onInit - Callback, der ausgeführt wird, wenn `gitbulk init` läuft.
- *                 Bekommt die Subkommando-Optionen und die globalen Optionen.
+ * @param handlers - Callbacks, die bei den jeweiligen Subkommandos laufen.
  */
-function buildProgram(
-  onInit: (cmdOpts: InitCommandOptions, globalOpts: { color: boolean }) => Promise<void>,
-): Command {
+function buildProgram(handlers: SubcommandHandlers): Command {
   const program = new Command();
 
   program
@@ -64,19 +77,40 @@ function buildProgram(
     .option('--dry-run', 'Do not perform any write operations (push, PR API)', false)
     .option('--tui', 'Run with an interactive terminal UI showing live per-RU progress', false)
     .option(
+      '--only <rus>',
+      'Only process these RUs (comma-separated subset of the configured RUs)',
+    )
+    .option(
       '-l, --log-level <level>',
       `Log level: ${LOG_LEVELS.join(' | ')}`,
       'info',
     )
     .option('--no-color', 'Disable colored output');
 
+  // WICHTIG: Sobald Subkommandos registriert sind, zeigt Commander bei einem
+  // Aufruf OHNE Subkommando (dem regulären Bulk-Flow, z. B.
+  // `gitbulk --config x.yaml`) standardmäßig nur die Hilfe und beendet sich mit
+  // Code 1. Eine (no-op) Root-Action verhindert das — die eigentliche Bulk-Logik
+  // läuft danach in main() nach parseAsync, nicht hier.
+  program.action(() => {
+    /* no-op: Bulk-Flow wird in main() ausgeführt */
+  });
+
   program
     .command('init')
-    .description('Interactively generate an operations config or a standalone .mjs code-change script')
+    .description('Interactively generate an operations config or a standalone .mjs/.ts code-change script')
     .option('-o, --output <path>', 'Output file path')
     .option('-f, --force', 'Overwrite the output file if it already exists', false)
     .action(async (cmdOpts: InitCommandOptions) => {
-      await onInit(cmdOpts, program.opts<{ color: boolean }>());
+      await handlers.onInit(cmdOpts, program.opts<{ color: boolean }>());
+    });
+
+  program
+    .command('list-operations')
+    .description('List all available declarative operations and their parameters')
+    .option('--json', 'Output as JSON (machine-readable)', false)
+    .action((cmdOpts: ListOperationsCommandOptions) => {
+      handlers.onListOperations(cmdOpts, program.opts<{ color: boolean }>());
     });
 
   return program;
@@ -113,18 +147,26 @@ function exitCodeFromSummary(summary: Awaited<ReturnType<typeof runBulk>>): numb
  * Hauptfunktion. Wirft NICHT — Fehler werden geloggt und Exit-Code wird gesetzt.
  */
 async function main(): Promise<number> {
-  // `init`-Subkommando: läuft während parseAsync. Das Ergebnis fangen wir ab,
-  // damit der reguläre Bulk-Flow danach NICHT mehr ausgeführt wird.
-  let initResult: number | undefined;
-  const program = buildProgram(async (cmdOpts, globalOpts) => {
-    const initOpts: Parameters<typeof runInitGenerator>[0] = { noColor: !globalOpts.color };
-    if (cmdOpts.output !== undefined) initOpts.outputPath = cmdOpts.output;
-    if (cmdOpts.force !== undefined) initOpts.force = cmdOpts.force;
-    initResult = await runInitGenerator(initOpts);
+  // Subkommandos (init / list-operations) laufen während parseAsync. Das
+  // Ergebnis fangen wir ab, damit der reguläre Bulk-Flow danach NICHT läuft.
+  let subcommandResult: number | undefined;
+  const program = buildProgram({
+    onInit: async (cmdOpts, globalOpts) => {
+      const initOpts: Parameters<typeof runInitGenerator>[0] = { noColor: !globalOpts.color };
+      if (cmdOpts.output !== undefined) initOpts.outputPath = cmdOpts.output;
+      if (cmdOpts.force !== undefined) initOpts.force = cmdOpts.force;
+      subcommandResult = await runInitGenerator(initOpts);
+    },
+    onListOperations: (cmdOpts, globalOpts) => {
+      subcommandResult = runListOperations({
+        json: cmdOpts.json ?? false,
+        noColor: !globalOpts.color,
+      });
+    },
   });
   await program.parseAsync(process.argv);
-  if (initResult !== undefined) {
-    return initResult;
+  if (subcommandResult !== undefined) {
+    return subcommandResult;
   }
 
   const opts = program.opts<{
@@ -132,6 +174,7 @@ async function main(): Promise<number> {
     mode: string;
     dryRun: boolean;
     tui: boolean;
+    only?: string;
     logLevel: string;
     color: boolean;
   }>();
@@ -180,6 +223,7 @@ async function main(): Promise<number> {
       signal: abortController.signal,
     };
     if (opts.config) tuiOpts.configPath = opts.config;
+    if (opts.only !== undefined) tuiOpts.only = opts.only;
     return runTui(tuiOpts);
   }
 
@@ -211,6 +255,14 @@ async function main(): Promise<number> {
   // --dry-run überschreibt das Config-Feld
   if (opts.dryRun && !config.dryRun) {
     config = Object.freeze({ ...config, dryRun: true });
+  }
+
+  // --only: RU-Liste auf eine Teilmenge beschränken
+  try {
+    config = filterRus(config, opts.only);
+  } catch (err) {
+    printError((err as Error).message, useColor);
+    return 3;
   }
 
   // ── PR-Adapter bauen ───────────────────────────────────────────
