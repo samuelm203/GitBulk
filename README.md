@@ -208,7 +208,9 @@ bitbucket:
 | `skipHooks`       | no       | Bypass git hooks (`--no-verify`).                                  |
 | `prPlatform`      | no       | PR platform. Currently `bitbucket`.                                |
 
-See the [`examples/`](./examples) directory for ready-to-copy YAML, JSON, JS, and TS configs.
+See the [`node_ts/examples/`](./node_ts/examples) directory for ready-to-copy configs (YAML,
+JSON, JS, TS), a declarative-operations config (`gitbulk.operations.yaml`), and example
+code-change scripts (`change.mjs`, `change.ts`).
 
 ### Script environment variables
 

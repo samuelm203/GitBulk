@@ -1,0 +1,73 @@
+# ──────────────────────────────────────────────────────────────
+# GitBulk — Beispiel: deklarative Operationen (statt eines Skripts)
+# ──────────────────────────────────────────────────────────────
+#
+# Statt `script:` kann der Code-Change rein deklarativ über `operations:`
+# beschrieben werden. Die Operationen laufen der Reihe nach pro RU, behandeln
+# eine fehlende Zieldatei als No-op und melden, ob sie etwas geändert haben.
+# Genau EINES von `script:` / `operations:` ist erlaubt.
+
+rus:
+  - my-service-api
+  - my-service-worker
+
+ticket: AKB-2025
+branch: feature/declarative-changes
+
+# Die Operationskette. Reihenfolge = Ausführungsreihenfolge.
+operations:
+  # 1) Datei anlegen (legt fehlende Verzeichnisse mit an; überspringt, wenn
+  #    die Datei schon existiert — außer overwrite: true).
+  - type: add-file
+    path: .editorconfig
+    content: |
+      root = true
+      [*]
+      indent_style = space
+      indent_size = 2
+
+  # 2) Inhalt einer VORHANDENEN Datei komplett ersetzen (No-op, wenn die Datei
+  #    fehlt oder der Inhalt bereits stimmt).
+  - type: replace-file
+    path: .nvmrc
+    content: "22\n"
+
+  # 3) Datei löschen (No-op, wenn sie schon weg ist; verweigert Verzeichnisse).
+  - type: delete-file
+    path: legacy/obsolete.txt
+
+  # 4) Suchen & Ersetzen per regulärem Ausdruck (JS-RegExp + replace-Syntax).
+  - type: regex-replace
+    path: pom.xml
+    pattern: "<java.version>17</java.version>"
+    replacement: "<java.version>21</java.version>"
+    # flags: g           # Standard: alle Treffer
+    # requireMatch: true # optional: "kein Treffer" als Fehler werten
+
+  # 5) Maven-Abhängigkeit in den ersten projektweiten <dependencies>-Block
+  #    einfügen (überspringt <dependencyManagement>; No-op, wenn schon vorhanden).
+  - type: maven-add-dependency
+    groupId: org.apache.commons
+    artifactId: commons-lang3
+    version: "3.14.0"
+    # scope: test
+    # pomPath: pom.xml
+
+commitMessage: "chore: apply standard project changes"
+prSummary: "Apply standard project changes across services"
+createPrOnError: false
+
+# Optional
+sourceBranch: master
+concurrency: 2
+
+# PR-Plattform
+prPlatform: bitbucket
+bitbucket:
+  workspace: my-workspace
+  apiVariant: cloud
+  targetBranch: master
+  reviewers: []
+
+# Hinweis: Den API-Token NICHT in die Datei schreiben, sondern als
+# Umgebungsvariable setzen: export GITBULK_BITBUCKET_TOKEN=...

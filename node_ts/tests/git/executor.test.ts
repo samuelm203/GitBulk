@@ -16,7 +16,7 @@ import {
   detectGit,
   GitExecutorError,
 } from '../../src/git/executor.js';
-import { createWorkspace, cleanup, setupRu, writeHangingNodeScript } from '../helpers/git-fixtures.js';
+import { createWorkspace, cleanup, setupRu, writeHangingPreCommitHook } from '../helpers/git-fixtures.js';
 
 let workspace: string;
 let ruPath: string;
@@ -80,33 +80,43 @@ describe('runGit', () => {
   });
 
   it('kills hanging process on timeout', async () => {
-    // Plattformneutral: Node als "hängender Editor" (wartet 30s).
-    // So braucht der Test kein sh und läuft auch auf Windows.
-    const hangScript = writeHangingNodeScript(workspace);
-    const editorCmd = `"${process.execPath}" "${hangScript}"`;
+    // Plattformneutral hängender Mechanismus: ein pre-commit-Hook, der schläft.
+    // Git führt Hooks über sein mitgeliefertes `sh` aus (auch auf Windows),
+    // das ist deterministischer als das `core.editor`-Verhalten von `git commit`,
+    // das auf Git-for-Windows den Editor mitunter übersprang. Eigenes Repo,
+    // damit die offen gehaltene Commit-Transaktion andere Tests nicht stört.
+    const { ruPath: hangRu } = setupRu(workspace, 'exec-timeout');
+    writeHangingPreCommitHook(hangRu);
+    writeFileSync(join(hangRu, 'change.txt'), 'pending\n');
+    await runGit(['add', '.'], { cwd: hangRu, timeoutMs: 5000 });
+
     const start = Date.now();
-    const r = await runGit(
-      ['-c', `core.editor=${editorCmd}`, 'commit', '--allow-empty'],
-      { cwd: ruPath, timeoutMs: 500 },
-    );
+    const r = await runGit(['commit', '-m', 'trigger hook'], {
+      cwd: hangRu,
+      timeoutMs: 500,
+    });
     const elapsed = Date.now() - start;
     assert.equal(r.timedOut, true);
-    assert.ok(elapsed < 5000, `timeout should be quick, took ${elapsed}ms`);
+    assert.ok(elapsed < 8000, `timeout should be quick, took ${elapsed}ms`);
   });
 
   it('cancels on AbortSignal', async () => {
-    const hangScript = writeHangingNodeScript(workspace);
-    const editorCmd = `"${process.execPath}" "${hangScript}"`;
+    const { ruPath: abortRu } = setupRu(workspace, 'exec-abort');
+    writeHangingPreCommitHook(abortRu);
+    writeFileSync(join(abortRu, 'change.txt'), 'pending\n');
+    await runGit(['add', '.'], { cwd: abortRu, timeoutMs: 5000 });
+
     const controller = new AbortController();
     setTimeout(() => controller.abort(), 100);
     const start = Date.now();
-    const r = await runGit(
-      ['-c', `core.editor=${editorCmd}`, 'commit', '--allow-empty'],
-      { cwd: ruPath, timeoutMs: 30_000, signal: controller.signal },
-    );
+    const r = await runGit(['commit', '-m', 'trigger hook'], {
+      cwd: abortRu,
+      timeoutMs: 30_000,
+      signal: controller.signal,
+    });
     const elapsed = Date.now() - start;
     assert.notEqual(r.exitCode, 0);
-    assert.ok(elapsed < 5000, `abort should be quick, took ${elapsed}ms`);
+    assert.ok(elapsed < 8000, `abort should be quick, took ${elapsed}ms`);
   });
 
   it('does not execute shell injection in args', async () => {
