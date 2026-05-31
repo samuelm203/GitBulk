@@ -24,8 +24,10 @@ Describe 'GitBulk module' {
 }
 
 Describe 'Get-GitBulkVersion' {
-    It 'returns a semver-like version' {
-        Get-GitBulkVersion | Should -Match '^\d+\.\d+\.\d+$'
+    It 'returns a dotted version (2-4 components)' {
+        # PowerShell-Modulversionen dürfen 2 bis 4 Komponenten haben (z. B. 1.2,
+        # 1.2.3 oder 1.2.3.4) — nicht auf exakt drei festnageln.
+        Get-GitBulkVersion | Should -Match '^\d+(\.\d+){1,3}$'
     }
 
     It 'matches the manifest ModuleVersion' {
