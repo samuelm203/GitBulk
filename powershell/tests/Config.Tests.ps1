@@ -106,6 +106,36 @@ Describe 'Get-GitBulkConfig validation' {
         $c.concurrency = 999
         { Get-GitBulkConfig -InputObject $c } | Should -Throw '*concurrency*'
     }
+
+    It 'rejects out-of-range retry.maxAttempts' {
+        $c = NewValidRawConfig
+        $c.retry = @{ maxAttempts = 0 }
+        { Get-GitBulkConfig -InputObject $c } | Should -Throw '*retry.maxAttempts*'
+    }
+
+    It 'rejects a negative retry.backoffMs' {
+        $c = NewValidRawConfig
+        $c.retry = @{ backoffMs = -5 }
+        { Get-GitBulkConfig -InputObject $c } | Should -Throw '*retry.backoffMs*'
+    }
+
+    It 'rejects reviewers that is not an array' {
+        $c = NewValidRawConfig
+        $c.bitbucket = @{ workspace = 'ws'; reviewers = 'not-an-array' }
+        { Get-GitBulkConfig -InputObject $c } | Should -Throw '*reviewers*'
+    }
+
+    It 'rejects reviewers containing empty strings' {
+        $c = NewValidRawConfig
+        $c.bitbucket = @{ workspace = 'ws'; reviewers = @('ok', '') }
+        { Get-GitBulkConfig -InputObject $c } | Should -Throw '*reviewers*'
+    }
+
+    It 'rejects operations authored as a mapping instead of an array' {
+        $c = NewValidRawConfig
+        $c.operations = @{ type = 'delete-file'; path = 'x.txt' }   # mapping, nicht Liste
+        { Get-GitBulkConfig -InputObject $c } | Should -Throw '*operations*'
+    }
 }
 
 Describe 'Get-GitBulkConfig file loading' {

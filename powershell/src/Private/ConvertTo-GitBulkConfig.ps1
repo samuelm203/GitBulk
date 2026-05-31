@@ -42,9 +42,16 @@ function ConvertTo-GitBulkConfig {
     # ── script XOR operations ────────────────────────────────────────
     $hasScript = -not [string]::IsNullOrWhiteSpace([string]$Raw['script'])
     $opsRaw = $Raw['operations']
-    $hasOps = ($opsRaw -is [System.Collections.IEnumerable] -and $opsRaw -isnot [string]) -and (@($opsRaw).Count -gt 0)
+    $opsProvided = $null -ne $opsRaw
+    # operations MUSS eine Liste/ein Array sein. Ein Mapping (Dictionary) ist
+    # zwar IEnumerable, wäre laut Schema (z.array(...)) aber ungültig — sonst
+    # würde @($dict) es still in ein 1-Element-Array verpacken.
+    $opsIsList = $opsRaw -is [System.Collections.IList]
+    $hasOps = $opsIsList -and (@($opsRaw).Count -gt 0)
 
-    if ($hasScript -and $hasOps) {
+    if ($opsProvided -and -not $opsIsList) {
+        $errors.Add("Error: 'operations' must be an array")
+    } elseif ($hasScript -and $hasOps) {
         $errors.Add("Error: set either 'script' or 'operations', not both")
     } elseif (-not $hasScript -and -not $hasOps) {
         $errors.Add("Error: one of 'script' or 'operations' is required")
@@ -87,15 +94,18 @@ function ConvertTo-GitBulkConfig {
     $cfg.commandTimeoutMs = Get-GbBoundedInt -Value $Raw['commandTimeoutMs'] -Default 120000 -Min 1000 -Max ([int]::MaxValue) `
         -Name 'commandTimeoutMs' -Errors $errors
 
-    # retry (Defaults 3 / 1000 / 30000)
+    # retry (Defaults 3 / 1000 / 30000) — mit Bounds wie das Zod-Schema:
+    # maxAttempts 1-20, backoffMs >= 0, maxBackoffMs >= 0.
     $retry = $Raw['retry']
-    $retryCfg = [ordered]@{ maxAttempts = 3; backoffMs = 1000; maxBackoffMs = 30000 }
-    if ($retry -is [System.Collections.IDictionary]) {
-        if ($null -ne $retry['maxAttempts']) { $retryCfg.maxAttempts = [int]$retry['maxAttempts'] }
-        if ($null -ne $retry['backoffMs']) { $retryCfg.backoffMs = [int]$retry['backoffMs'] }
-        if ($null -ne $retry['maxBackoffMs']) { $retryCfg.maxBackoffMs = [int]$retry['maxBackoffMs'] }
+    if ($retry -isnot [System.Collections.IDictionary]) { $retry = @{} }
+    $cfg.retry = [ordered]@{
+        maxAttempts  = Get-GbBoundedInt -Value $retry['maxAttempts'] -Default 3 -Min 1 -Max 20 `
+            -Name 'retry.maxAttempts' -Errors $errors
+        backoffMs    = Get-GbBoundedInt -Value $retry['backoffMs'] -Default 1000 -Min 0 -Max ([int]::MaxValue) `
+            -Name 'retry.backoffMs' -Errors $errors
+        maxBackoffMs = Get-GbBoundedInt -Value $retry['maxBackoffMs'] -Default 30000 -Min 0 -Max ([int]::MaxValue) `
+            -Name 'retry.maxBackoffMs' -Errors $errors
     }
-    $cfg.retry = $retryCfg
 
     # ── PR-Plattform + Sub-Config ────────────────────────────────────
     $platform = [string]$Raw['prPlatform']
@@ -118,7 +128,7 @@ function ConvertTo-GitBulkConfig {
                         workspace    = [string]$bb['workspace']
                         apiVariant   = $variant
                         targetBranch = if ([string]::IsNullOrWhiteSpace([string]$bb['targetBranch'])) { 'master' } else { [string]$bb['targetBranch'] }
-                        reviewers    = @(if ($null -ne $bb['reviewers']) { $bb['reviewers'] })
+                        reviewers    = Get-GbReviewerList -Value $bb['reviewers'] -Name 'bitbucket.reviewers' -Errors $errors
                     }
                     if (-not [string]::IsNullOrWhiteSpace([string]$bb['apiBaseUrl'])) { $sub.apiBaseUrl = [string]$bb['apiBaseUrl'] }
                     $cfg.bitbucket = $sub
@@ -133,7 +143,7 @@ function ConvertTo-GitBulkConfig {
                     $sub = [ordered]@{
                         owner        = [string]$gh['owner']
                         targetBranch = if ([string]::IsNullOrWhiteSpace([string]$gh['targetBranch'])) { 'main' } else { [string]$gh['targetBranch'] }
-                        reviewers    = @(if ($null -ne $gh['reviewers']) { $gh['reviewers'] })
+                        reviewers    = Get-GbReviewerList -Value $gh['reviewers'] -Name 'github.reviewers' -Errors $errors
                     }
                     if (-not [string]::IsNullOrWhiteSpace([string]$gh['apiBaseUrl'])) { $sub.apiBaseUrl = [string]$gh['apiBaseUrl'] }
                     $cfg.github = $sub
@@ -169,4 +179,27 @@ function Get-GbBoundedInt {
         return $Default
     }
     return $parsed
+}
+
+function Get-GbReviewerList {
+    # Validiert ein optionales Reviewer-Feld als Array nicht-leerer Strings
+    # (Zod: z.array(z.string().min(1)).default([])). Meldet Fehler in $Errors.
+    param(
+        $Value,
+        [string]$Name,
+        [System.Collections.Generic.List[string]]$Errors
+    )
+    if ($null -eq $Value) { return @() }
+    # Ein Skalar-String oder ein Mapping ist kein gültiges Array.
+    if ($Value -is [string] -or $Value -is [System.Collections.IDictionary] -or $Value -isnot [System.Collections.IList]) {
+        $Errors.Add("Error: $Name must be an array of non-empty strings")
+        return @()
+    }
+    foreach ($r in $Value) {
+        if ($r -isnot [string] -or [string]::IsNullOrWhiteSpace($r)) {
+            $Errors.Add("Error: $Name must contain only non-empty strings")
+            return @()
+        }
+    }
+    return @($Value)
 }
