@@ -88,3 +88,46 @@ jobs:
 
       - name: Test
         run: npm test
+
+  # ── PowerShell-Port (powershell/) ──────────────────────────────────
+  # Eigener Job: lintet (PSScriptAnalyzer) und testet (Pester v5) die native
+  # PowerShell-Implementierung mit pwsh auf allen drei Betriebssystemen.
+  # GitHub-Runner bringen pwsh vorinstalliert mit.
+  powershell:
+    name: PowerShell (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: powershell
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Globale Git-Identität (die Tests erstellen echte Commits in Temp-Repos).
+      - name: Configure Git
+        shell: bash
+        run: |
+          git config --global user.email "ci@example.com"
+          git config --global user.name "CI Runner"
+          git config --global init.defaultBranch master
+        working-directory: ${{ github.workspace }}
+
+      - name: Install PowerShell modules
+        shell: pwsh
+        run: |
+          Set-PSRepository PSGallery -InstallationPolicy Trusted
+          Install-Module Pester -MinimumVersion 5.5.0 -Force -Scope CurrentUser -SkipPublisherCheck
+          Install-Module PSScriptAnalyzer -Force -Scope CurrentUser
+          Install-Module powershell-yaml -Force -Scope CurrentUser
+
+      - name: Lint + Test (build.ps1)
+        shell: pwsh
+        run: ./build.ps1
