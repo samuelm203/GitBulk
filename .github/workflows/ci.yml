@@ -111,15 +111,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Globale Git-Identität (die Tests erstellen echte Commits in Temp-Repos).
-      - name: Configure Git
-        shell: bash
-        run: |
-          git config --global user.email "ci@example.com"
-          git config --global user.name "CI Runner"
-          git config --global init.defaultBranch master
-        working-directory: ${{ github.workspace }}
-
       - name: Install PowerShell modules
         shell: pwsh
         run: |

@@ -8,8 +8,10 @@
 
 $ErrorActionPreference = 'Stop'
 
-$private = @(Get-ChildItem -Path (Join-Path $PSScriptRoot 'src/Private/*.ps1') -ErrorAction SilentlyContinue)
-$public = @(Get-ChildItem -Path (Join-Path $PSScriptRoot 'src/Public/*.ps1') -ErrorAction SilentlyContinue)
+$privateDir = Join-Path $PSScriptRoot 'src' 'Private'
+$publicDir = Join-Path $PSScriptRoot 'src' 'Public'
+$private = @(Get-ChildItem -Path $privateDir -Filter '*.ps1' -File -ErrorAction SilentlyContinue)
+$public = @(Get-ChildItem -Path $publicDir -Filter '*.ps1' -File -ErrorAction SilentlyContinue)
 
 foreach ($file in @($private + $public)) {
     try {
