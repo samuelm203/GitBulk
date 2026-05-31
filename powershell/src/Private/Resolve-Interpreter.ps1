@@ -80,7 +80,8 @@ function Resolve-Interpreter {
     switch -Regex ($ext) {
         '^\.(sh|bash)$' {
             if ($IsWindows) { return @{ Command = (Find-GitShell); PrefixArgs = @() } }
-            return @{ Command = (if ($ext -eq '.bash') { 'bash' } else { 'sh' }); PrefixArgs = @() }
+            $shell = if ($ext -eq '.bash') { 'bash' } else { 'sh' }
+            return @{ Command = $shell; PrefixArgs = @() }
         }
         '^\.(bat|cmd)$' { return @{ Command = 'cmd.exe'; PrefixArgs = @('/c') } }
         '^\.ps1$' { return @{ Command = 'pwsh'; PrefixArgs = @('-NoProfile', '-File') } }
