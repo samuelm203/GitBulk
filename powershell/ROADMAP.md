@@ -38,7 +38,11 @@ Laufzeit nötig.
 - **6c-1 (✅):** Parameter-Metadaten je Operation (`Params`: Name/Kind/Required/
   Default/Enum) + öffentliche `Get-GitBulkOperationInfo` und `Show-GitBulkOperationList`
   (`gitbulk.ps1 -ListOperations [-Json]`). Pflichtparameter werden aus `Params` abgeleitet.
-- **6c-2:** interaktiver `init`-Generator (`gitbulk.ps1 -Init`).
+- **6c-2 (✅):** interaktiver `init`-Generator (`gitbulk.ps1 -Init` → `Invoke-GitBulkInit`)
+  + testbare Kernfunktion `New-GitBulkConfigYaml` (baut/serialisiert die operations-Config
+  via powershell-yaml). Skript-Modus der Node-Version bewusst nicht portiert.
+
+**Damit ist der PowerShell-Port funktional auf Augenhöhe mit der Node-Version.**
 
 ## Technische Knackpunkte
 
