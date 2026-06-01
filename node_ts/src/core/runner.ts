@@ -18,7 +18,7 @@
  *   und am Ende eine aggregierte Statistik enthält.
  */
 
-import pLimit from 'p-limit';
+import { createLimit } from '../utils/concurrency.js';
 
 import type { GitBulkConfig } from '../config/schema.js';
 import { runPhase3, type Phase3Result } from '../git/phase3.js';
@@ -282,7 +282,7 @@ export async function runBulk(
     `Starting GitBulk run: ${config.rus.length} RUs, platform=${adapter.platformName}, concurrency=${config.concurrency}${config.dryRun ? ' [DRY-RUN]' : ''}`,
   );
 
-  const limit = pLimit(config.concurrency);
+  const limit = createLimit(config.concurrency);
   const total = config.rus.length;
 
   // ctx-Basis; optionale Felder nur setzen wenn vorhanden (exactOptionalPropertyTypes).

@@ -22,7 +22,7 @@
 import process from 'node:process';
 
 import { Command } from 'commander';
-import chalk from 'chalk';
+import * as colors from '../utils/colors.js';
 
 import { loadConfig, ConfigError } from '../config/loader.js';
 import { createLogger, setDefaultLogger, type LogLevel, LOG_LEVELS } from '../utils/logger.js';
@@ -130,7 +130,7 @@ function parseLogLevel(value: string): LogLevel {
  * Druckt einen fett markierten Fehler nach stderr.
  */
 function printError(message: string, useColor: boolean): void {
-  const prefix = useColor ? chalk.red.bold('Error:') : 'Error:';
+  const prefix = useColor ? colors.redBold('Error:') : 'Error:';
   process.stderr.write(`${prefix} ${message}\n`);
 }
 
