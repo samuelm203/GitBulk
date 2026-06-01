@@ -9,7 +9,9 @@
 Register-GitBulkOperation @{
     Type           = 'delete-file'
     Description    = 'Delete a file (no-op if it is already gone)'
-    RequiredParams = @('path')
+    Params      = @(
+        @{ Name = 'path'; Kind = 'string'; Required = $true }
+    )
     Apply          = {
         param($Params, $Ctx)
 

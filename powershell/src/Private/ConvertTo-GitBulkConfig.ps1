@@ -70,9 +70,11 @@ function ConvertTo-GitBulkConfig {
                 if ($null -eq $known) {
                     $errors.Add("Error: operations[$i] unknown type '$opType'")
                 } else {
-                    # Pflicht-Parameter müssen vorhanden sein (Wert-Prüfung — z. B.
-                    # leerer Pfad, ungültige Regex — passiert zur Laufzeit in apply).
-                    foreach ($req in @($known.RequiredParams)) {
+                    # Pflicht-Parameter (aus den Params-Metadaten) müssen vorhanden
+                    # sein. Wert-Prüfung (leerer Pfad, ungültige Regex) passiert zur
+                    # Laufzeit in apply.
+                    $required = @($known.Params | Where-Object { $_.Required } | ForEach-Object { $_.Name })
+                    foreach ($req in $required) {
                         if (-not $op.Contains($req)) {
                             $errors.Add("Error: operations[$i] ($opType) requires '$req'")
                         }

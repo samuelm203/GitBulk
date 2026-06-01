@@ -11,7 +11,11 @@
 Register-GitBulkOperation @{
     Type           = 'npm-update'
     Description    = 'Update the version of an existing dependency in package.json'
-    RequiredParams = @('name', 'version')
+    Params      = @(
+        @{ Name = 'name'; Kind = 'string'; Required = $true }
+        @{ Name = 'version'; Kind = 'string'; Required = $true }
+        @{ Name = 'packagePath'; Kind = 'string'; Required = $false; Default = 'package.json' }
+    )
     Apply          = {
         param($Params, $Ctx)
 

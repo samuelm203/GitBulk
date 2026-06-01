@@ -14,7 +14,13 @@
 Register-GitBulkOperation @{
     Type           = 'maven-add-dependency'
     Description    = 'Add a Maven dependency to pom.xml (before </dependencies>)'
-    RequiredParams = @('groupId', 'artifactId', 'version')
+    Params      = @(
+        @{ Name = 'groupId'; Kind = 'string'; Required = $true }
+        @{ Name = 'artifactId'; Kind = 'string'; Required = $true }
+        @{ Name = 'version'; Kind = 'string'; Required = $true }
+        @{ Name = 'scope'; Kind = 'string'; Required = $false }
+        @{ Name = 'pomPath'; Kind = 'string'; Required = $false; Default = 'pom.xml' }
+    )
     Apply          = {
         param($Params, $Ctx)
 

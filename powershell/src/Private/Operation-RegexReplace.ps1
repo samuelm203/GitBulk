@@ -16,7 +16,13 @@
 Register-GitBulkOperation @{
     Type           = 'regex-replace'
     Description    = 'Search & replace in a file via a regular expression'
-    RequiredParams = @('path', 'pattern', 'replacement')
+    Params      = @(
+        @{ Name = 'path'; Kind = 'string'; Required = $true }
+        @{ Name = 'pattern'; Kind = 'string'; Required = $true }
+        @{ Name = 'replacement'; Kind = 'string'; Required = $true }
+        @{ Name = 'flags'; Kind = 'string'; Required = $false; Default = 'g' }
+        @{ Name = 'requireMatch'; Kind = 'boolean'; Required = $false; Default = $false }
+    )
     Apply          = {
         param($Params, $Ctx)
 

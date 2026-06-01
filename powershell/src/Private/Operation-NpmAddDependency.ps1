@@ -11,7 +11,12 @@
 Register-GitBulkOperation @{
     Type           = 'npm-add-dependency'
     Description    = 'Add a dependency to package.json (skips if already present)'
-    RequiredParams = @('name', 'version')
+    Params      = @(
+        @{ Name = 'name'; Kind = 'string'; Required = $true }
+        @{ Name = 'version'; Kind = 'string'; Required = $true }
+        @{ Name = 'field'; Kind = 'enum'; Required = $false; Default = 'dependencies'; Enum = @('dependencies', 'devDependencies', 'peerDependencies') }
+        @{ Name = 'packagePath'; Kind = 'string'; Required = $false; Default = 'package.json' }
+    )
     Apply          = {
         param($Params, $Ctx)
 

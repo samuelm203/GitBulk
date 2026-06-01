@@ -35,7 +35,10 @@ Laufzeit nötig.
 - **6b (✅):** JSON-Helfer (`Json.ps1` — ordnungserhaltender Parser + eigener
   Serializer mit Indent-Beibehaltung) + `maven-add-dependency`, `npm-add-dependency`,
   `npm-update`, `json-patch`. Damit sind alle 8 Operationen portiert.
-- **6c:** `list-operations` (öffentlich) + interaktiver `init`-Generator.
+- **6c-1 (✅):** Parameter-Metadaten je Operation (`Params`: Name/Kind/Required/
+  Default/Enum) + öffentliche `Get-GitBulkOperationInfo` und `Show-GitBulkOperationList`
+  (`gitbulk.ps1 -ListOperations [-Json]`). Pflichtparameter werden aus `Params` abgeleitet.
+- **6c-2:** interaktiver `init`-Generator (`gitbulk.ps1 -Init`).
 
 ## Technische Knackpunkte
 

@@ -11,7 +11,10 @@
 Register-GitBulkOperation @{
     Type           = 'replace-file'
     Description    = 'Replace the full content of an existing file (skips if missing)'
-    RequiredParams = @('path', 'content')
+    Params      = @(
+        @{ Name = 'path'; Kind = 'string'; Required = $true }
+        @{ Name = 'content'; Kind = 'string'; Required = $true }
+    )
     Apply          = {
         param($Params, $Ctx)
 
