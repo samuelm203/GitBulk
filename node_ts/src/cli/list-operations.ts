@@ -7,7 +7,7 @@
  * angezeigt werden — ohne separate Pflege.
  */
 
-import chalk from 'chalk';
+import * as colors from '../utils/colors.js';
 
 import { listOperations, getOperation } from '../operations/index.js';
 import { describeOperationParams, type ParamSpec } from './operation-introspect.js';
@@ -55,9 +55,9 @@ export function runListOperations(options: ListOperationsOptions = {}): number {
   }
 
   const useColor = !options.noColor;
-  const bold = (s: string): string => (useColor ? chalk.bold(s) : s);
-  const dim = (s: string): string => (useColor ? chalk.gray(s) : s);
-  const green = (s: string): string => (useColor ? chalk.green(s) : s);
+  const bold = (s: string): string => (useColor ? colors.bold(s) : s);
+  const dim = (s: string): string => (useColor ? colors.gray(s) : s);
+  const green = (s: string): string => (useColor ? colors.green(s) : s);
 
   if (infos.length === 0) {
     process.stdout.write('No operations are registered.\n');

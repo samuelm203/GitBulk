@@ -17,7 +17,7 @@ import { stdin as input, stdout as output } from 'node:process';
 import { existsSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import chalk from 'chalk';
+import * as colors from '../utils/colors.js';
 
 import { listOperations, getOperation } from '../operations/index.js';
 import {
@@ -65,19 +65,19 @@ interface CollectedOp {
  */
 async function promptParam(rl: Interface, spec: ParamSpec): Promise<unknown> {
   const def =
-    spec.defaultValue !== undefined ? ` ${chalk.gray(`[default: ${String(spec.defaultValue)}]`)}` : '';
-  const opt = spec.required ? '' : chalk.gray(' (optional)');
+    spec.defaultValue !== undefined ? ` ${colors.gray(`[default: ${String(spec.defaultValue)}]`)}` : '';
+  const opt = spec.required ? '' : colors.gray(' (optional)');
 
   if (spec.kind === 'boolean') {
     const hint = spec.required ? '(Y/N)' : '(Y/N, blank = default)';
     for (;;) {
-      const raw = (await rl.question(chalk.cyan(`  ${spec.name} ${hint}${def}: `))).trim();
+      const raw = (await rl.question(colors.cyan(`  ${spec.name} ${hint}${def}: `))).trim();
       if (raw === '') {
         return spec.required ? promptRetry(rl, spec) : undefined;
       }
       const res = validateYesNo(raw);
       if (res.ok) return res.value;
-      process.stderr.write(`${chalk.red(res.error)}\n`);
+      process.stderr.write(`${colors.red(res.error)}\n`);
     }
   }
 
@@ -85,36 +85,36 @@ async function promptParam(rl: Interface, spec: ParamSpec): Promise<unknown> {
     const values = spec.enumValues ?? [];
     for (;;) {
       const raw = (
-        await rl.question(chalk.cyan(`  ${spec.name} (${values.join(' / ')})${def}: `))
+        await rl.question(colors.cyan(`  ${spec.name} (${values.join(' / ')})${def}: `))
       ).trim();
       if (raw === '' && !spec.required) return undefined;
       if (values.includes(raw)) return raw;
-      process.stderr.write(`${chalk.red(`Please enter one of: ${values.join(', ')}`)}\n`);
+      process.stderr.write(`${colors.red(`Please enter one of: ${values.join(', ')}`)}\n`);
     }
   }
 
   if (spec.kind === 'number') {
     for (;;) {
-      const raw = (await rl.question(chalk.cyan(`  ${spec.name} (number)${def}: `))).trim();
+      const raw = (await rl.question(colors.cyan(`  ${spec.name} (number)${def}: `))).trim();
       if (raw === '' && !spec.required) return undefined;
       const n = Number(raw);
       if (raw !== '' && Number.isFinite(n)) return n;
-      process.stderr.write(`${chalk.red('Please enter a valid number.')}\n`);
+      process.stderr.write(`${colors.red('Please enter a valid number.')}\n`);
     }
   }
 
   // string
   for (;;) {
-    const raw = await rl.question(chalk.cyan(`  ${spec.name}${opt}${def}: `));
+    const raw = await rl.question(colors.cyan(`  ${spec.name}${opt}${def}: `));
     if (raw === '' && !spec.required) return undefined;
     if (raw.length > 0) return raw;
-    process.stderr.write(`${chalk.red('This field is required.')}\n`);
+    process.stderr.write(`${colors.red('This field is required.')}\n`);
   }
 }
 
 /** Kleiner Helfer: erneut nach einem Pflicht-Boolean fragen. */
 async function promptRetry(rl: Interface, spec: ParamSpec): Promise<unknown> {
-  process.stderr.write(`${chalk.red('This field is required.')}\n`);
+  process.stderr.write(`${colors.red('This field is required.')}\n`);
   return promptParam(rl, spec);
 }
 
@@ -130,7 +130,7 @@ async function collectOperation(rl: Interface, type: string): Promise<CollectedO
   const specs = describeOperationParams(op.schema);
   const raw: Record<string, unknown> = {};
 
-  output.write(chalk.bold(`\nConfiguring "${type}":\n`));
+  output.write(colors.bold(`\nConfiguring "${type}":\n`));
   for (const spec of specs) {
     const value = await promptParam(rl, spec);
     if (value !== undefined) {
@@ -140,10 +140,10 @@ async function collectOperation(rl: Interface, type: string): Promise<CollectedO
 
   const parsed = op.schema.safeParse(raw);
   if (!parsed.success) {
-    process.stderr.write(chalk.red('\nInvalid parameters:\n'));
+    process.stderr.write(colors.red('\nInvalid parameters:\n'));
     for (const issue of parsed.error.issues) {
       const path = issue.path.length > 0 ? issue.path.join('.') : '<root>';
-      process.stderr.write(chalk.red(`  • ${path}: ${issue.message}\n`));
+      process.stderr.write(colors.red(`  • ${path}: ${issue.message}\n`));
     }
     return undefined;
   }
@@ -159,13 +159,13 @@ async function collectOperations(rl: Interface): Promise<CollectedOp[]> {
   const collected: CollectedOp[] = [];
 
   for (;;) {
-    output.write(chalk.bold('\nAvailable operations:\n'));
+    output.write(colors.bold('\nAvailable operations:\n'));
     available.forEach((op, i) => {
-      output.write(`  ${chalk.green(String(i + 1))}. ${op.type} — ${chalk.gray(op.description)}\n`);
+      output.write(`  ${colors.green(String(i + 1))}. ${op.type} — ${colors.gray(op.description)}\n`);
     });
     const doneHint = collected.length > 0 ? " or 'd' to finish" : '';
     const raw = (
-      await rl.question(chalk.cyan(`Select an operation (1-${available.length})${doneHint}: `))
+      await rl.question(colors.cyan(`Select an operation (1-${available.length})${doneHint}: `))
     ).trim();
 
     if (collected.length > 0 && (raw === 'd' || raw === 'D')) {
@@ -177,14 +177,14 @@ async function collectOperations(rl: Interface): Promise<CollectedOp[]> {
       ? available[idx - 1]
       : undefined;
     if (!chosen) {
-      process.stderr.write(chalk.red('Invalid selection.\n'));
+      process.stderr.write(colors.red('Invalid selection.\n'));
       continue;
     }
 
     const op = await collectOperation(rl, chosen.type);
     if (op) {
       collected.push(op);
-      output.write(chalk.green(`✓ Added ${op.type} (${collected.length} total).\n`));
+      output.write(colors.green(`✓ Added ${op.type} (${collected.length} total).\n`));
     }
   }
 }
@@ -203,7 +203,7 @@ async function resolveOutputPath(
       validateYesNo,
     );
     if (!overwrite) {
-      output.write(chalk.yellow('Aborted — no file written.\n'));
+      output.write(colors.yellow('Aborted — no file written.\n'));
       return undefined;
     }
   }
@@ -219,25 +219,25 @@ export async function runInitGenerator(opts: InitOptions = {}): Promise<number> 
   const rl = createInterface({ input, output });
 
   try {
-    output.write(chalk.bold('\n━━━ GitBulk init — code-change generator ━━━\n'));
+    output.write(colors.bold('\n━━━ GitBulk init — code-change generator ━━━\n'));
 
     if (listOperations().length === 0) {
-      process.stderr.write(chalk.red('No operations are registered.\n'));
+      process.stderr.write(colors.red('No operations are registered.\n'));
       return 3;
     }
 
     // ── 1) Art des Code-Change zuerst wählen ─────────────────────
-    output.write(chalk.bold('\nWhat do you want to create?\n'));
-    output.write(`  ${chalk.green('1')}. A config with declarative operations (YAML)\n`);
-    output.write(`  ${chalk.green('2')}. A standalone code-change script\n`);
+    output.write(colors.bold('\nWhat do you want to create?\n'));
+    output.write(`  ${colors.green('1')}. A config with declarative operations (YAML)\n`);
+    output.write(`  ${colors.green('2')}. A standalone code-change script\n`);
     const kind = await promptUntilValid(rl, 'Choose (1/2):', chooseOneOrTwo);
 
     // ── 2) Bei Skript: Sprache wählen ────────────────────────────
     let language: ScriptLanguage = 'js';
     if (kind === '2') {
-      output.write(chalk.bold('\nScript language?\n'));
-      output.write(`  ${chalk.green('1')}. JavaScript (.mjs)\n`);
-      output.write(`  ${chalk.green('2')}. TypeScript (.ts)\n`);
+      output.write(colors.bold('\nScript language?\n'));
+      output.write(`  ${colors.green('1')}. JavaScript (.mjs)\n`);
+      output.write(`  ${colors.green('2')}. TypeScript (.ts)\n`);
       const lang = await promptUntilValid(rl, 'Choose (1/2):', chooseOneOrTwo);
       language = lang === '2' ? 'ts' : 'js';
     }
@@ -267,7 +267,7 @@ async function exportScript(
 
   if (unsupported.length > 0) {
     process.stderr.write(
-      chalk.yellow(
+      colors.yellow(
         `\nNote: no script generator for: ${[...new Set(unsupported)].join(', ')}. ` +
           'These are left as TODO comments in the script.\n',
       ),
@@ -279,11 +279,11 @@ async function exportScript(
   if (!target) return 3;
 
   writeFileSync(target, code, { mode: 0o755 });
-  output.write(chalk.green(`\n✓ Wrote standalone script: ${target}\n`));
-  output.write(chalk.gray(`  Use it via the "script" field in your config, then edit freely.\n`));
+  output.write(colors.green(`\n✓ Wrote standalone script: ${target}\n`));
+  output.write(colors.gray(`  Use it via the "script" field in your config, then edit freely.\n`));
   if (language === 'ts') {
     output.write(
-      chalk.gray('  TypeScript runs via tsx (npm i -D tsx) or Node >= 22.6 automatically.\n'),
+      colors.gray('  TypeScript runs via tsx (npm i -D tsx) or Node >= 22.6 automatically.\n'),
     );
   }
   return 0;
@@ -295,7 +295,7 @@ async function exportConfig(
   opts: InitOptions,
   operations: CollectedOp[],
 ): Promise<number> {
-  output.write(chalk.bold('\nNow the remaining config fields:\n'));
+  output.write(colors.bold('\nNow the remaining config fields:\n'));
 
   const rus = await promptUntilValid(rl, 'List of RUs, separated by commas:', validateRuList);
   const ticket = await promptUntilValid(rl, 'Enter ticket (e.g. AKB-1234):', validateTicket);
@@ -332,7 +332,7 @@ async function exportConfig(
   if (!target) return 3;
 
   writeFileSync(target, yaml);
-  output.write(chalk.green(`\n✓ Wrote config: ${target}\n`));
-  output.write(chalk.gray(`  Run it via: gitbulk --config ${target}\n`));
+  output.write(colors.green(`\n✓ Wrote config: ${target}\n`));
+  output.write(colors.gray(`  Run it via: gitbulk --config ${target}\n`));
   return 0;
 }

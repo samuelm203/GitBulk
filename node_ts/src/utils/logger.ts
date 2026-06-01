@@ -17,7 +17,7 @@
  * ```
  */
 
-import chalk from 'chalk';
+import * as colors from './colors.js';
 
 /**
  * Verfügbare Log-Levels in aufsteigender Schwere.
@@ -100,19 +100,19 @@ export function createLogger(options: LoggerOptions = {}): Logger {
 
     if (showTimestamps) {
       const ts = `[${timestamp()}]`;
-      parts.push(useColor ? chalk.gray(ts) : ts);
+      parts.push(useColor ? colors.gray(ts) : ts);
     }
 
     const levelTag = `[${msgLevel.toUpperCase()}]`.padEnd(7);
     if (useColor) {
       const colored =
         msgLevel === 'error'
-          ? chalk.red(levelTag)
+          ? colors.red(levelTag)
           : msgLevel === 'warn'
-            ? chalk.yellow(levelTag)
+            ? colors.yellow(levelTag)
             : msgLevel === 'debug'
-              ? chalk.gray(levelTag)
-              : chalk.cyan(levelTag);
+              ? colors.gray(levelTag)
+              : colors.cyan(levelTag);
       parts.push(colored);
     } else {
       parts.push(levelTag);
@@ -120,7 +120,7 @@ export function createLogger(options: LoggerOptions = {}): Logger {
 
     if (ruContext) {
       const ruTag = `[${ruContext}]`;
-      parts.push(useColor ? chalk.magenta(ruTag) : ruTag);
+      parts.push(useColor ? colors.magenta(ruTag) : ruTag);
     }
 
     parts.push(message);

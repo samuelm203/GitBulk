@@ -7,7 +7,7 @@
  * Runner ergänzen.
  */
 
-import chalk from 'chalk';
+import * as colors from '../utils/colors.js';
 
 import type { RuResult, RunSummary } from './runner.js';
 
@@ -18,11 +18,11 @@ const OUTCOME_STYLES: Record<
   RuResult['outcome'],
   { symbol: string; color: (s: string) => string; label: string }
 > = {
-  'pr-created': { symbol: '✓', color: chalk.green, label: 'PR created' },
-  'pr-skipped': { symbol: '○', color: chalk.gray, label: 'skipped' },
-  'pr-failed': { symbol: '✗', color: chalk.red, label: 'PR failed' },
-  'not-processed': { symbol: '–', color: chalk.dim, label: 'not processed' },
-  'fatal-error': { symbol: '!', color: chalk.red.bold, label: 'fatal error' },
+  'pr-created': { symbol: '✓', color: colors.green, label: 'PR created' },
+  'pr-skipped': { symbol: '○', color: colors.gray, label: 'skipped' },
+  'pr-failed': { symbol: '✗', color: colors.red, label: 'PR failed' },
+  'not-processed': { symbol: '–', color: colors.dim, label: 'not processed' },
+  'fatal-error': { symbol: '!', color: colors.redBold, label: 'fatal error' },
 };
 
 /**
@@ -60,7 +60,7 @@ export function printRunSummary(summary: RunSummary, options: { noColor?: boolea
   // ── Header ─────────────────────────────────────────────────────
   out.write('\n');
   const title = `── GitBulk Run Summary ${'─'.repeat(60)}`.slice(0, 84);
-  out.write(`${useColor ? chalk.bold(title) : title}\n`);
+  out.write(`${useColor ? colors.bold(title) : title}\n`);
 
   const header = [
     'RU'.padEnd(ruWidth),
@@ -68,7 +68,7 @@ export function printRunSummary(summary: RunSummary, options: { noColor?: boolea
     'Detail'.padEnd(detailWidth),
     'Duration'.padEnd(durationWidth),
   ].join('  ');
-  out.write(`${useColor ? chalk.dim(header) : header}\n`);
+  out.write(`${useColor ? colors.dim(header) : header}\n`);
 
   // ── Zeilen ─────────────────────────────────────────────────────
   for (const r of summary.results) {
@@ -94,7 +94,7 @@ export function printRunSummary(summary: RunSummary, options: { noColor?: boolea
     // Bei Fehlern: Details ausgeben (eingerückt)
     if (r.outcome === 'pr-failed' || r.outcome === 'fatal-error') {
       const errMsg = r.phase3.fatalError ?? r.phase4.error ?? '(no details)';
-      const indented = `    ${useColor ? chalk.dim('└') : '└'} ${errMsg}`;
+      const indented = `    ${useColor ? colors.dim('└') : '└'} ${errMsg}`;
       out.write(`${indented}\n`);
     }
   }
@@ -103,13 +103,13 @@ export function printRunSummary(summary: RunSummary, options: { noColor?: boolea
   out.write('\n');
   const t = summary.totals;
   const parts = [
-    useColor ? chalk.green(`${t.prsCreated} created`) : `${t.prsCreated} created`,
-    useColor ? chalk.gray(`${t.prsSkipped} skipped`) : `${t.prsSkipped} skipped`,
-    useColor ? chalk.red(`${t.prsFailed} failed`) : `${t.prsFailed} failed`,
-    useColor ? chalk.dim(`${t.notProcessed} not processed`) : `${t.notProcessed} not processed`,
+    useColor ? colors.green(`${t.prsCreated} created`) : `${t.prsCreated} created`,
+    useColor ? colors.gray(`${t.prsSkipped} skipped`) : `${t.prsSkipped} skipped`,
+    useColor ? colors.red(`${t.prsFailed} failed`) : `${t.prsFailed} failed`,
+    useColor ? colors.dim(`${t.notProcessed} not processed`) : `${t.notProcessed} not processed`,
   ];
   if (t.fatalErrors > 0) {
-    parts.push(useColor ? chalk.red.bold(`${t.fatalErrors} fatal`) : `${t.fatalErrors} fatal`);
+    parts.push(useColor ? colors.redBold(`${t.fatalErrors} fatal`) : `${t.fatalErrors} fatal`);
   }
   out.write(
     `Total: ${t.rus} RUs — ${parts.join(', ')} — ${fmtDuration(summary.totalDurationMs)}\n`,
@@ -119,7 +119,7 @@ export function printRunSummary(summary: RunSummary, options: { noColor?: boolea
   const created = summary.results.filter((r) => r.outcome === 'pr-created' && r.phase4.prUrl);
   if (created.length > 0) {
     out.write('\n');
-    out.write(useColor ? chalk.bold('Created PRs:\n') : 'Created PRs:\n');
+    out.write(useColor ? colors.bold('Created PRs:\n') : 'Created PRs:\n');
     for (const r of created) {
       out.write(`  • ${r.ru}: ${r.phase4.prUrl}\n`);
     }

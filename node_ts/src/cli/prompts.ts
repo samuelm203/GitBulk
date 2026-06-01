@@ -17,7 +17,7 @@
 import { createInterface, type Interface } from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
 
-import chalk from 'chalk';
+import * as colors from '../utils/colors.js';
 import {
   validateRuList,
   validateBranchName,
@@ -67,7 +67,7 @@ export async function promptUntilValid<T>(
   // SIGINT/Ctrl+C beendet den Prozess auf der Ebene des CLI-Einstiegs.
 
   while (true) {
-    const raw = await rl.question(chalk.cyan(`${promptText} `));
+    const raw = await rl.question(colors.cyan(`${promptText} `));
     const result = validator(raw);
 
     if (result.ok) {
@@ -75,7 +75,7 @@ export async function promptUntilValid<T>(
     }
 
     // Fehler auf stderr — passt zu Anwendungs-Logs in CI-Pipelines.
-    process.stderr.write(`${chalk.red(result.error)}\n`);
+    process.stderr.write(`${colors.red(result.error)}\n`);
   }
 }
 
@@ -91,15 +91,15 @@ export async function confirmConfig(
   config: InteractiveInputResult,
 ): Promise<boolean> {
   output.write('\n');
-  output.write(chalk.bold('━━━ Configuration Summary ━━━\n'));
-  output.write(`  ${chalk.gray('RUs:')}             ${config.rus.join(', ')}\n`);
-  output.write(`  ${chalk.gray('Ticket:')}          ${config.ticket}\n`);
-  output.write(`  ${chalk.gray('Branch:')}          ${config.ticket}-${config.branch}\n`);
-  output.write(`  ${chalk.gray('Script:')}          ${config.script}\n`);
-  output.write(`  ${chalk.gray('Commit message:')}  ${config.commitMessage}\n`);
-  output.write(`  ${chalk.gray('PR summary:')}      ${config.prSummary}\n`);
-  output.write(`  ${chalk.gray('PR on error:')}     ${config.createPrOnError ? 'Yes' : 'No'}\n`);
-  output.write(chalk.bold('━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'));
+  output.write(colors.bold('━━━ Configuration Summary ━━━\n'));
+  output.write(`  ${colors.gray('RUs:')}             ${config.rus.join(', ')}\n`);
+  output.write(`  ${colors.gray('Ticket:')}          ${config.ticket}\n`);
+  output.write(`  ${colors.gray('Branch:')}          ${config.ticket}-${config.branch}\n`);
+  output.write(`  ${colors.gray('Script:')}          ${config.script}\n`);
+  output.write(`  ${colors.gray('Commit message:')}  ${config.commitMessage}\n`);
+  output.write(`  ${colors.gray('PR summary:')}      ${config.prSummary}\n`);
+  output.write(`  ${colors.gray('PR on error:')}     ${config.createPrOnError ? 'Yes' : 'No'}\n`);
+  output.write(colors.bold('━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'));
 
   return promptUntilValid(rl, 'Confirm configuration? (Y/N):', validateYesNo);
 }
@@ -119,7 +119,7 @@ export async function runInteractivePrompts(): Promise<InteractiveInputResult> {
   try {
     // Outer loop: wiederholt sich, wenn der User die Zusammenfassung ablehnt.
     while (true) {
-      output.write(chalk.bold('\n━━━ GitBulk Configuration ━━━\n\n'));
+      output.write(colors.bold('\n━━━ GitBulk Configuration ━━━\n\n'));
 
       // 1. RU-Liste
       const rus = await promptUntilValid(rl, 'List of RUs, separated by commas:', validateRuList);
@@ -166,7 +166,7 @@ export async function runInteractivePrompts(): Promise<InteractiveInputResult> {
         return config;
       }
 
-      output.write(chalk.yellow('\nRestarting configuration...\n'));
+      output.write(colors.yellow('\nRestarting configuration...\n'));
     }
   } finally {
     rl.close();
