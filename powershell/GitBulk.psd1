@@ -14,7 +14,7 @@
 
     # Wird von GitBulk.psm1 per Export-ModuleMember gesetzt; hier explizit für
     # Discovery/Tooling. Bei neuen öffentlichen Funktionen ergänzen.
-    FunctionsToExport = @('Get-GitBulkVersion', 'Get-GitBulkConfig')
+    FunctionsToExport = @('Get-GitBulkVersion', 'Get-GitBulkConfig', 'Invoke-GitBulkRun')
     CmdletsToExport   = @()
     VariablesToExport = @()
     AliasesToExport   = @()
