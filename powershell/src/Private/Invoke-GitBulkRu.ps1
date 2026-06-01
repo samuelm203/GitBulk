@@ -74,15 +74,35 @@ function Invoke-GitBulkRu {
     $r = Invoke-Git -Arguments @('checkout', '-B', $branchName) -Cwd $repoPath -TimeoutMs $timeout
     if ($r.ExitCode -ne 0) { return (fail "git checkout -B $branchName failed: $($r.Stderr.Trim())") }
 
-    # ── 4. Code-Change ───────────────────────────────────────────────
-    if (-not $Config.Contains('script')) {
-        # Deklarative `operations` kommen in Phase 6.
-        return (fail 'operations are not yet supported in the PowerShell port (use script:)')
+    # ── 4. Code-Change (Skript ODER deklarative operations) ──────────
+    if ($Config.Contains('script')) {
+        $cc = Invoke-CodeChange -ScriptPath ([string]$Config.script) -Cwd $repoPath -TimeoutMs $timeout -Context @{
+            Ru = $Ru; Ticket = $Config.ticket; Branch = $branchName; SourceBranch = $sourceBranch
+        }
+        $result.CodeChangeOk = ($cc.ExitCode -eq 0 -and -not $cc.TimedOut)
+    } else {
+        # operations-Kette: jede Operation nacheinander im Repo ausführen. Ein
+        # Operation-Fehler (Error gesetzt) markiert den Code-Change als
+        # fehlgeschlagen → Commit-Message "ERROR WHILE CODE CHANGE" (wie beim Skript
+        # mit Exit-Code != 0). Die restlichen Operationen laufen dennoch weiter.
+        $opCtx = @{
+            RepoDir = $repoPath; Ru = $Ru; Ticket = [string]$Config.ticket
+            Branch  = $branchName; SourceBranch = $sourceBranch
+        }
+        $allOk = $true
+        foreach ($opStep in @($Config.operations)) {
+            $type = [string]$opStep['type']
+            $op = Get-GitBulkOperation -Type $type
+            if ($null -eq $op) {
+                # Sollte dank Config-Validierung nicht auftreten — defensiv als fatal
+                # behandeln, damit kein Müll-Commit über alle RUs entsteht.
+                return (fail "unknown operation type '$type'")
+            }
+            $opRes = Invoke-GitBulkOperation -Operation $op -Params $opStep -Context $opCtx
+            if ($opRes.Error) { $allOk = $false }
+        }
+        $result.CodeChangeOk = $allOk
     }
-    $cc = Invoke-CodeChange -ScriptPath ([string]$Config.script) -Cwd $repoPath -TimeoutMs $timeout -Context @{
-        Ru = $Ru; Ticket = $Config.ticket; Branch = $branchName; SourceBranch = $sourceBranch
-    }
-    $result.CodeChangeOk = ($cc.ExitCode -eq 0 -and -not $cc.TimedOut)
 
     # ── 5. Diff prüfen ───────────────────────────────────────────────
     $status = Invoke-Git -Arguments @('status', '--porcelain') -Cwd $repoPath -TimeoutMs $timeout

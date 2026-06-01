@@ -8,6 +8,17 @@
 
 $ErrorActionPreference = 'Stop'
 
+# Operations-Registry — VOR dem Dot-Sourcing definieren, damit sich die
+# Operation-Dateien (src/Private/Operation-*.ps1) beim Laden selbst registrieren
+# können (Seiteneffekt, analog zu operations/index.ts in der Node-Version).
+$script:GitBulkOperations = [ordered]@{}
+function Register-GitBulkOperation {
+    param([Parameter(Mandatory)][hashtable]$Operation)
+    if ([string]::IsNullOrWhiteSpace($Operation.Type)) { throw 'operation requires a Type' }
+    if (-not ($Operation.Apply -is [scriptblock])) { throw "operation '$($Operation.Type)' requires an Apply scriptblock" }
+    $script:GitBulkOperations[$Operation.Type] = $Operation
+}
+
 $privateDir = Join-Path $PSScriptRoot 'src' 'Private'
 $publicDir = Join-Path $PSScriptRoot 'src' 'Public'
 $private = @(Get-ChildItem -Path $privateDir -Filter '*.ps1' -File -ErrorAction SilentlyContinue)

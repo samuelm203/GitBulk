@@ -5,9 +5,11 @@ A **native PowerShell port** of [GitBulk](../README.md) — same bulk Git workfl
 Node runtime required.
 
 > **Status:** in development. The end-to-end flow works (config → run across RUs →
-> commit/push → open PRs on GitHub/Bitbucket). Declarative `operations:` are not yet
-> ported (use `script:`). See [ROADMAP.md](./ROADMAP.md); the reference implementation
-> is [`../node_ts/`](../node_ts).
+> commit/push → open PRs on GitHub/Bitbucket). Declarative `operations:` are partially
+> ported — the four **file operations** (`add-file`, `replace-file`, `delete-file`,
+> `regex-replace`) work; the `maven-*` / `npm-*` / `json-patch` operations are still
+> pending (use `script:` for those). See [ROADMAP.md](./ROADMAP.md); the reference
+> implementation is [`../node_ts/`](../node_ts).
 
 ## Usage
 
@@ -26,7 +28,39 @@ Invoke-GitBulk -ConfigPath ./gitbulk.config.yaml -DryRun
 
 Exit codes: `0` success · `1` a PR failed · `2` a fatal per-RU error · `3` setup
 error (bad config, unknown `-Only` RU). The config format matches the Node version
-(see the repo root [README](../README.md)); the code change is defined via `script:`.
+(see the repo root [README](../README.md)); the code change is defined via `script:`
+**or** a declarative `operations:` chain.
+
+### Declarative operations (instead of a script)
+
+Each RU runs exactly one code change: a free `script:` **or** an `operations:` chain.
+The ported file operations write only inside the repo directory (paths must be
+relative and may not escape via `..`):
+
+```yaml
+# gitbulk.config.yaml — operations instead of a script
+operations:
+  - type: add-file
+    path: docs/NOTICE.md
+    content: "© ACME\n"
+    overwrite: false          # default: skip an existing file with other content
+  - type: replace-file        # only updates an existing file
+    path: .editorconfig
+    content: "root = true\n"
+  - type: regex-replace
+    path: build.gradle
+    pattern: "version = '1\\.0\\.0'"
+    replacement: "version = '1.1.0'"
+    flags: g                  # .NET regex; g = replace all (default)
+    requireMatch: false       # true → "no match" is an error
+  - type: delete-file
+    path: obsolete.txt
+```
+
+An operation that fails (e.g. `requireMatch` with no match, or a path outside the
+repo) marks the whole change as failed → the commit message becomes
+`ERROR WHILE CODE CHANGE` (a PR is opened only with `createPrOnError: true`), exactly
+like a script exiting non-zero.
 
 ## Requirements
 
