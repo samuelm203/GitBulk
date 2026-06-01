@@ -11,6 +11,11 @@
         # PowerShell 7+ (unsere Mindestversion) korrekt gelesen — auch deutsche
         # Umlaute in Kommentaren. Eine BOM ist nur für Windows PowerShell 5.1
         # nötig, das wir explizit NICHT unterstützen.
-        'PSUseBOMForUnicodeEncodedFile'
+        'PSUseBOMForUnicodeEncodedFile',
+        # GitBulk nutzt durchgängig ein eigenes -DryRun/dryRun-Paradigma statt
+        # ShouldProcess/-WhatIf. New-*PullRequest sind interne Result-Style-
+        # Adapter (kein Throw, keine -WhatIf-Semantik), daher ist ShouldProcess
+        # hier nicht passend.
+        'PSUseShouldProcessForStateChangingFunctions'
     )
 }
