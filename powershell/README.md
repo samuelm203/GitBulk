@@ -4,11 +4,13 @@ A **native PowerShell port** of [GitBulk](../README.md) — same bulk Git workfl
 (code change → commit → push feature branch → open PR across many repos), with no
 Node runtime required.
 
-> **Status:** in development. The end-to-end flow works (config → run across RUs →
-> commit/push → open PRs on GitHub/Bitbucket). All eight declarative `operations:` are
-> ported (file, npm, json and maven) and discoverable via `-ListOperations`. Still
-> pending vs. the Node version: the interactive `init` generator. See
-> [ROADMAP.md](./ROADMAP.md); the reference implementation is [`../node_ts/`](../node_ts).
+> **Status:** functionally on par with the Node version. The end-to-end flow works
+> (config → run across RUs → commit/push → open PRs on GitHub/Bitbucket), all eight
+> declarative `operations:` are ported (file, npm, json and maven), discoverable via
+> `-ListOperations`, and an interactive `-Init` generator scaffolds an `operations:`
+> config. (The Node `init` can also emit a standalone script; the PowerShell port
+> only generates the operations config.) See [ROADMAP.md](./ROADMAP.md); the reference
+> implementation is [`../node_ts/`](../node_ts).
 
 ## Usage
 
@@ -23,6 +25,10 @@ $env:GITBULK_GITHUB_TOKEN = '…'      # or GITBULK_BITBUCKET_TOKEN
 # Discover the available declarative operations + their parameters:
 ./gitbulk.ps1 -ListOperations            # human-readable
 ./gitbulk.ps1 -ListOperations -Json      # machine-readable (pipe / redirect)
+
+# Scaffold a new operations config interactively:
+./gitbulk.ps1 -Init                      # writes ./gitbulk.config.yaml
+./gitbulk.ps1 -Init -Output ./my.yaml -Force
 
 # Or via the module functions:
 Import-Module ./GitBulk.psd1
