@@ -5,11 +5,10 @@ A **native PowerShell port** of [GitBulk](../README.md) — same bulk Git workfl
 Node runtime required.
 
 > **Status:** in development. The end-to-end flow works (config → run across RUs →
-> commit/push → open PRs on GitHub/Bitbucket). Declarative `operations:` are partially
-> ported — the four **file operations** (`add-file`, `replace-file`, `delete-file`,
-> `regex-replace`) work; the `maven-*` / `npm-*` / `json-patch` operations are still
-> pending (use `script:` for those). See [ROADMAP.md](./ROADMAP.md); the reference
-> implementation is [`../node_ts/`](../node_ts).
+> commit/push → open PRs on GitHub/Bitbucket). All eight declarative `operations:` are
+> ported (file, npm, json and maven). Still pending vs. the Node version: the
+> `list-operations` command and the interactive `init` generator. See
+> [ROADMAP.md](./ROADMAP.md); the reference implementation is [`../node_ts/`](../node_ts).
 
 ## Usage
 
@@ -34,8 +33,22 @@ error (bad config, unknown `-Only` RU). The config format matches the Node versi
 ### Declarative operations (instead of a script)
 
 Each RU runs exactly one code change: a free `script:` **or** an `operations:` chain.
-The ported file operations write only inside the repo directory (paths must be
-relative and may not escape via `..`):
+All operations write only inside the repo directory (paths must be relative and may
+not escape via `..`). Available operations:
+
+| Operation | What it does |
+|-----------|--------------|
+| `add-file` | Create a file with content (skips an existing file unless `overwrite`) |
+| `replace-file` | Replace the full content of an existing file (skips if missing) |
+| `delete-file` | Delete a file (no-op if already gone) |
+| `regex-replace` | Search & replace in a file via a .NET regex (`flags: g` = replace all) |
+| `npm-add-dependency` | Add a dependency to `package.json` (`field`: dependencies/devDependencies/peerDependencies) |
+| `npm-update` | Update the version of an existing dependency in `package.json` |
+| `json-patch` | Set a value at a dot-path in a JSON file (`value` parsed as JSON if possible) |
+| `maven-add-dependency` | Add a Maven dependency to `pom.xml` (before the project `</dependencies>`) |
+
+JSON edits keep the file's existing indentation and key order; npm/json operations
+are idempotent (skip when already set). Example:
 
 ```yaml
 # gitbulk.config.yaml — operations instead of a script
@@ -55,6 +68,20 @@ operations:
     requireMatch: false       # true → "no match" is an error
   - type: delete-file
     path: obsolete.txt
+  - type: npm-add-dependency
+    name: lodash
+    version: "^4.17.21"
+    field: dependencies       # default; also devDependencies / peerDependencies
+  - type: json-patch
+    path: package.json
+    pointer: scripts.build    # dot-path; missing intermediates are created
+    value: "tsc"              # parsed as JSON if possible ("true", "42", '{"a":1}')
+  - type: maven-add-dependency
+    pomPath: pom.xml          # default
+    groupId: org.apache.commons
+    artifactId: commons-lang3
+    version: "3.14.0"
+    scope: test               # optional
 ```
 
 An operation that fails (e.g. `requireMatch` with no match, or a path outside the

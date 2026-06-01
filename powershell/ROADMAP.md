@@ -32,7 +32,9 @@ Laufzeit nötig.
   **Datei-Operationen** (`add-file`, `replace-file`, `delete-file`, `regex-replace`)
   + Integration in `Invoke-GitBulkRu` (script XOR operations) + Config-Validierung
   (unbekannter Typ / fehlender Pflicht-Param → Exit 3).
-- **6b:** `maven-add-dependency`, `npm-add-dependency`, `npm-update`, `json-patch`.
+- **6b (✅):** JSON-Helfer (`Json.ps1` — ordnungserhaltender Parser + eigener
+  Serializer mit Indent-Beibehaltung) + `maven-add-dependency`, `npm-add-dependency`,
+  `npm-update`, `json-patch`. Damit sind alle 8 Operationen portiert.
 - **6c:** `list-operations` (öffentlich) + interaktiver `init`-Generator.
 
 ## Technische Knackpunkte
