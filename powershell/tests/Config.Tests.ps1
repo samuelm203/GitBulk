@@ -136,6 +136,18 @@ Describe 'Get-GitBulkConfig validation' {
         $c.operations = @{ type = 'delete-file'; path = 'x.txt' }   # mapping, nicht Liste
         { Get-GitBulkConfig -InputObject $c } | Should -Throw '*operations*'
     }
+
+    It 'rejects an unknown operation type' {
+        $c = NewValidRawConfig
+        $c.operations = @(@{ type = 'no-such-op'; path = 'x.txt' })
+        { Get-GitBulkConfig -InputObject $c } | Should -Throw "*unknown type*"
+    }
+
+    It 'rejects an operation missing a required parameter' {
+        $c = NewValidRawConfig
+        $c.operations = @(@{ type = 'add-file' })   # 'path' fehlt
+        { Get-GitBulkConfig -InputObject $c } | Should -Throw "*requires 'path'*"
+    }
 }
 
 Describe 'Get-GitBulkConfig file loading' {

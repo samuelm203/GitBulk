@@ -65,7 +65,20 @@ function ConvertTo-GitBulkConfig {
             if ($op -isnot [System.Collections.IDictionary] -or [string]::IsNullOrWhiteSpace([string]$op['type'])) {
                 $errors.Add("Error: operations[$i] needs a non-empty 'type'")
             } else {
-                $opList.Add($op)
+                $opType = [string]$op['type']
+                $known = Get-GitBulkOperation -Type $opType
+                if ($null -eq $known) {
+                    $errors.Add("Error: operations[$i] unknown type '$opType'")
+                } else {
+                    # Pflicht-Parameter müssen vorhanden sein (Wert-Prüfung — z. B.
+                    # leerer Pfad, ungültige Regex — passiert zur Laufzeit in apply).
+                    foreach ($req in @($known.RequiredParams)) {
+                        if (-not $op.Contains($req)) {
+                            $errors.Add("Error: operations[$i] ($opType) requires '$req'")
+                        }
+                    }
+                    $opList.Add($op)
+                }
             }
             $i++
         }
