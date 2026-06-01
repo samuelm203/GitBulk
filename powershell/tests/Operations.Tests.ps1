@@ -67,7 +67,7 @@ InModuleScope GitBulk {
                 Get-GitBulkOperation -Type 'no-such-op' | Should -BeNullOrEmpty
             }
             It 'lists operations sorted by type' {
-                $types = (Get-GitBulkOperationList).Type
+                $types = (Get-GitBulkOperationInfo).Type
                 $types | Should -Contain 'add-file'
                 $types | Should -Contain 'regex-replace'
                 ($types -join ',') | Should -Be (($types | Sort-Object) -join ',')

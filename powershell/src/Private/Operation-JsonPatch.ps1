@@ -12,7 +12,11 @@
 Register-GitBulkOperation @{
     Type           = 'json-patch'
     Description    = 'Set a value at a dot-path in a JSON file (value parsed as JSON if possible)'
-    RequiredParams = @('path', 'pointer', 'value')
+    Params      = @(
+        @{ Name = 'path'; Kind = 'string'; Required = $true }
+        @{ Name = 'pointer'; Kind = 'string'; Required = $true }
+        @{ Name = 'value'; Kind = 'string'; Required = $true }
+    )
     Apply          = {
         param($Params, $Ctx)
 

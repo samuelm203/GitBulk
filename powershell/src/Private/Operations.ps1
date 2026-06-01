@@ -7,10 +7,13 @@
 # enthalten, die GitBulk im Repo-Verzeichnis ausführt.
 #
 # Eine Operation ist eine Hashtable mit:
-#   Type           [string]      eindeutiger Name, wie er in der Config steht
-#   Description    [string]      Kurzbeschreibung (für Hilfe/Generator)
-#   RequiredParams [string[]]    Parameter, die in der Config vorhanden sein MÜSSEN
-#   Apply          [scriptblock] param($Params, $Ctx) → @{ Changed; Message; Error }
+#   Type        [string]      eindeutiger Name, wie er in der Config steht
+#   Description [string]      Kurzbeschreibung (für Hilfe/Generator)
+#   Params      [hashtable[]] Parameter-Metadaten je Feld: @{ Name; Kind
+#                             (string/number/boolean/enum); Required; Default?; Enum? }.
+#                             Die Pflichtparameter (Config-Validierung) und die
+#                             list-operations-Ausgabe werden hieraus abgeleitet.
+#   Apply       [scriptblock] param($Params, $Ctx) → @{ Changed; Message; Error }
 #
 # Registriert werden Operationen per Register-GitBulkOperation (im Modul-Loader
 # GitBulk.psm1 definiert, damit es schon beim Dot-Sourcing der Operation-Dateien
@@ -59,20 +62,6 @@ function Get-GitBulkOperation {
         return $script:GitBulkOperations[$Type]
     }
     return $null
-}
-
-# Liefert alle registrierten Operationen (Typ + Beschreibung), nach Typ sortiert —
-# für list-operations / den interaktiven Generator (Phase 6c).
-function Get-GitBulkOperationList {
-    [CmdletBinding()]
-    [OutputType([pscustomobject])]
-    param()
-
-    return @(
-        $script:GitBulkOperations.Values |
-            Sort-Object -Property Type |
-            ForEach-Object { [pscustomobject]@{ Type = $_.Type; Description = $_.Description } }
-    )
 }
 
 # ── Ausführung ───────────────────────────────────────────────────────

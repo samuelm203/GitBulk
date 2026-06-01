@@ -10,7 +10,11 @@
 Register-GitBulkOperation @{
     Type           = 'add-file'
     Description    = 'Create a file with given content (skips an existing file unless overwrite)'
-    RequiredParams = @('path')
+    Params      = @(
+        @{ Name = 'path'; Kind = 'string'; Required = $true }
+        @{ Name = 'content'; Kind = 'string'; Required = $false; Default = '' }
+        @{ Name = 'overwrite'; Kind = 'boolean'; Required = $false; Default = $false }
+    )
     Apply          = {
         param($Params, $Ctx)
 
