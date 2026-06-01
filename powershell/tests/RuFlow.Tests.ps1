@@ -32,7 +32,7 @@ InModuleScope GitBulk {
             }
 
             function newConfig {
-                param([string]$Workspace, [string]$Script, [bool]$DryRun = $false, [bool]$CloneIfMissing = $false)
+                param([string]$Workspace, [string]$Script, [bool]$DryRun = $false, [bool]$CloneIfMissing = $false, [bool]$CreatePrOnError = $false)
                 return [ordered]@{
                     ticket           = 'AKB-1'
                     branch           = 'feature/x'
@@ -40,7 +40,9 @@ InModuleScope GitBulk {
                     script           = $Script
                     commitMessage    = 'test commit'
                     prSummary        = 'summary'
-                    createPrOnError  = $false
+                    prPlatform       = 'github'
+                    github           = [ordered]@{ owner = 'o'; targetBranch = 'main'; reviewers = @() }
+                    createPrOnError  = $CreatePrOnError
                     dryRun           = $DryRun
                     skipHooks        = $false
                     cloneIfMissing   = $CloneIfMissing
@@ -65,14 +67,29 @@ InModuleScope GitBulk {
             }
         }
 
-        It 'pushes a feature branch when the code change makes a diff' {
+        It 'pushes and creates a PR when the code change makes a diff' {
+            Mock New-GitBulkPullRequest { @{ Ok = $true; Id = 1; Url = 'http://pr/1'; StatusCode = 201; Error = $null } }
             $w = newWorkspace
             $script = writeChangeScript -Workspace $w.Workspace -Name 'change.ps1' -Body "Set-Content -Path 'change.txt' -Value 'changed'"
             $cfg = newConfig -Workspace $w.Workspace -Script $script
 
             $r = Invoke-GitBulkRu -Config $cfg -Ru $w.Ru
-            $r.Outcome | Should -Be 'pushed'
+            $r.Outcome | Should -Be 'pr-created'
             $r.CodeChangeOk | Should -BeTrue
+            $r.PrUrl | Should -Be 'http://pr/1'
+            remoteHasBranch -Repo $w.Repo -Branch 'AKB-1-feature/x' | Should -BeTrue
+            Should -Invoke New-GitBulkPullRequest -Times 1 -ParameterFilter { $SourceBranch -eq 'AKB-1-feature/x' }
+        }
+
+        It 'reports pr-failed when the push succeeds but PR creation fails' {
+            Mock New-GitBulkPullRequest { @{ Ok = $false; Id = $null; Url = ''; StatusCode = 422; Error = 'PR exists' } }
+            $w = newWorkspace
+            $script = writeChangeScript -Workspace $w.Workspace -Name 'change.ps1' -Body "Set-Content -Path 'change.txt' -Value 'changed'"
+            $cfg = newConfig -Workspace $w.Workspace -Script $script
+
+            $r = Invoke-GitBulkRu -Config $cfg -Ru $w.Ru
+            $r.Outcome | Should -Be 'pr-failed'
+            $r.Error | Should -Match 'PR exists'
             remoteHasBranch -Repo $w.Repo -Branch 'AKB-1-feature/x' | Should -BeTrue
         }
 
@@ -107,15 +124,30 @@ InModuleScope GitBulk {
             remoteHasBranch -Repo $w.Repo -Branch 'AKB-1-feature/x' | Should -BeFalse
         }
 
-        It 'commits "ERROR WHILE CODE CHANGE" when the script fails but changes files' {
+        It 'commits "ERROR WHILE CODE CHANGE" and creates NO PR when createPrOnError is false' {
+            Mock New-GitBulkPullRequest { @{ Ok = $true; Url = 'http://pr/x' } }
             $w = newWorkspace
             $script = writeChangeScript -Workspace $w.Workspace -Name 'fail.ps1' -Body "Set-Content -Path 'change.txt' -Value 'x'; exit 1"
-            $cfg = newConfig -Workspace $w.Workspace -Script $script
+            $cfg = newConfig -Workspace $w.Workspace -Script $script -CreatePrOnError $false
 
             $r = Invoke-GitBulkRu -Config $cfg -Ru $w.Ru
             $r.Outcome | Should -Be 'pushed'
             $r.CodeChangeOk | Should -BeFalse
             (& git -C $w.Repo log -1 --format=%s).Trim() | Should -Be 'ERROR WHILE CODE CHANGE'
+            Should -Invoke New-GitBulkPullRequest -Times 0
+        }
+
+        It 'creates a PR on a failed code change when createPrOnError is true' {
+            Mock New-GitBulkPullRequest { @{ Ok = $true; Id = 2; Url = 'http://pr/2'; StatusCode = 201; Error = $null } }
+            $w = newWorkspace
+            $script = writeChangeScript -Workspace $w.Workspace -Name 'fail.ps1' -Body "Set-Content -Path 'change.txt' -Value 'x'; exit 1"
+            $cfg = newConfig -Workspace $w.Workspace -Script $script -CreatePrOnError $true
+
+            $r = Invoke-GitBulkRu -Config $cfg -Ru $w.Ru
+            $r.Outcome | Should -Be 'pr-created'
+            $r.CodeChangeOk | Should -BeFalse
+            $r.PrUrl | Should -Be 'http://pr/2'
+            Should -Invoke New-GitBulkPullRequest -Times 1
         }
     }
 }

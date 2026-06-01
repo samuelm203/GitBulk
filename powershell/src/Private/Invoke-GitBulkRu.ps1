@@ -37,6 +37,7 @@ function Invoke-GitBulkRu {
         Branch       = $branchName
         Outcome      = ''
         CodeChangeOk = $true
+        PrUrl        = $null
         Message      = ''
         Error        = $null
     }
@@ -132,7 +133,24 @@ function Invoke-GitBulkRu {
         return [pscustomobject]$result
     }
 
-    $result.Outcome = 'pushed'
-    $result.Message = if ($result.CodeChangeOk) { 'committed and pushed' } else { 'pushed with code-change error' }
+    # ── 8. Pull Request erstellen (Phase 4 Adapter) ──────────────────
+    # Bei fehlgeschlagenem Code-Change nur, wenn createPrOnError gesetzt ist.
+    if (-not $result.CodeChangeOk -and -not $Config.createPrOnError) {
+        $result.Outcome = 'pushed'
+        $result.Message = 'pushed with code-change error (no PR — createPrOnError is false)'
+        return [pscustomobject]$result
+    }
+
+    $pr = New-GitBulkPullRequest -Config $Config -Ru $Ru -SourceBranch $branchName `
+        -Title ([string]$Config.prSummary) -Description ([string]$Config.prSummary)
+    if ($pr.Ok) {
+        $result.Outcome = 'pr-created'
+        $result.PrUrl = [string]$pr.Url
+        $result.Message = if ($result.CodeChangeOk) { "PR created: $($pr.Url)" } else { "PR created (code-change error): $($pr.Url)" }
+    } else {
+        $result.Outcome = 'pr-failed'
+        $result.Error = $pr.Error
+        $result.Message = 'pushed, but PR creation failed'
+    }
     return [pscustomobject]$result
 }

@@ -54,10 +54,12 @@ function Invoke-GitBulkRun {
     [pscustomobject]@{
         Results   = $results
         Total     = $results.Count
-        Pushed    = (& $countBy 'pushed')
-        Committed = (& $countBy 'committed')
+        PrCreated = (& $countBy 'pr-created')
+        PrFailed  = (& $countBy 'pr-failed')
+        Pushed    = (& $countBy 'pushed')       # gepusht ohne PR (z. B. Code-Change-Fehler ohne createPrOnError)
+        Committed = (& $countBy 'committed')    # Dry-Run
         NoChanges = (& $countBy 'no-changes')
         Skipped   = (& $countBy 'skipped')
-        Failed    = @($results | Where-Object { $_.Outcome -in @('fatal', 'push-failed') }).Count
+        Fatal     = @($results | Where-Object { $_.Outcome -in @('fatal', 'push-failed') }).Count
     }
 }

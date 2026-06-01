@@ -29,12 +29,13 @@ BeforeAll {
     }
 
     function script:newRunConfig {
-        param([string]$Workspace, [string]$Script, [string[]]$Rus, [int]$Concurrency = 2)
+        param([string]$Workspace, [string]$Script, [string[]]$Rus, [int]$Concurrency = 2, [bool]$DryRun = $false)
         return [ordered]@{
             rus = $Rus; ticket = 'AKB-1'; branch = 'feature/x'; sourceBranch = 'master'
             script = $Script; commitMessage = 'test commit'; prSummary = 'summary'
-            createPrOnError = $false; dryRun = $false; skipHooks = $false; cloneIfMissing = $false
+            createPrOnError = $false; dryRun = $DryRun; skipHooks = $false; cloneIfMissing = $false
             workspaceDir = $Workspace; commandTimeoutMs = 30000; concurrency = $Concurrency
+            prPlatform = 'github'; github = [ordered]@{ owner = 'o'; targetBranch = 'main'; reviewers = @() }
             retry = [ordered]@{ maxAttempts = 2; backoffMs = 0; maxBackoffMs = 0 }
         }
     }
@@ -52,22 +53,22 @@ AfterAll {
 }
 
 Describe 'Invoke-GitBulkRun' {
+    # Dry-Run: testet den Loop + Concurrency + Summary ohne push/PR (der PR-Call
+    # liefe sonst echt im parallelen Runspace und wäre nicht mockbar).
     It 'processes all RUs in parallel and summarizes the outcomes' {
         $ws = newRunWorkspace
-        $repoA = addRepo -Workspace $ws -Ru 'repo-a'
-        $repoB = addRepo -Workspace $ws -Ru 'repo-b'
+        $null = addRepo -Workspace $ws -Ru 'repo-a'
+        $null = addRepo -Workspace $ws -Ru 'repo-b'
         $script = Join-Path $ws 'change.ps1'
         [System.IO.File]::WriteAllText($script, "Set-Content -Path 'change.txt' -Value 'changed'")
-        $cfg = newRunConfig -Workspace $ws -Script $script -Rus @('repo-a', 'repo-b', 'ghost') -Concurrency 2
+        $cfg = newRunConfig -Workspace $ws -Script $script -Rus @('repo-a', 'repo-b', 'ghost') -Concurrency 2 -DryRun $true
 
         $summary = Invoke-GitBulkRun -Config $cfg
 
         $summary.Total | Should -Be 3
-        $summary.Pushed | Should -Be 2
+        $summary.Committed | Should -Be 2
         $summary.Skipped | Should -Be 1
-        $summary.Failed | Should -Be 0
-        remoteHasBranch -Repo $repoA -Branch 'AKB-1-feature/x' | Should -BeTrue
-        remoteHasBranch -Repo $repoB -Branch 'AKB-1-feature/x' | Should -BeTrue
+        $summary.Fatal | Should -Be 0
     }
 
     It 'reports no-changes for a script that produces no diff' {
@@ -80,7 +81,6 @@ Describe 'Invoke-GitBulkRun' {
         $summary = Invoke-GitBulkRun -Config $cfg
         $summary.Total | Should -Be 1
         $summary.NoChanges | Should -Be 1
-        $summary.Pushed | Should -Be 0
     }
 
     It 'runs sequentially when concurrency is 1' {
@@ -89,10 +89,10 @@ Describe 'Invoke-GitBulkRun' {
         $null = addRepo -Workspace $ws -Ru 'repo-b'
         $script = Join-Path $ws 'change.ps1'
         [System.IO.File]::WriteAllText($script, "Set-Content -Path 'change.txt' -Value 'x'")
-        $cfg = newRunConfig -Workspace $ws -Script $script -Rus @('repo-a', 'repo-b') -Concurrency 1
+        $cfg = newRunConfig -Workspace $ws -Script $script -Rus @('repo-a', 'repo-b') -Concurrency 1 -DryRun $true
 
         $summary = Invoke-GitBulkRun -Config $cfg
         $summary.Total | Should -Be 2
-        $summary.Pushed | Should -Be 2
+        $summary.Committed | Should -Be 2
     }
 }
