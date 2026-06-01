@@ -91,6 +91,7 @@ function parseCliArgs() {
   return parseArgs({
     args: process.argv.slice(2),
     allowPositionals: true,
+    tokens: true,
     options: {
       config: { type: 'string', short: 'c' },
       mode: { type: 'string', short: 'm', default: 'hybrid' },
@@ -150,6 +151,17 @@ async function main(): Promise<number> {
   const useColor = !values['no-color'];
   const subcommand = positionals[0];
 
+  // Tatsächlich übergebene Optionen (nicht nur Defaults), damit wir
+  // Subkommando-Optionen im falschen Kontext als Fehler melden können statt sie
+  // still zu ignorieren (entspricht dem strengen Commander-Verhalten von früher).
+  const provided = new Set<string>(
+    parsed.tokens.filter((t) => t.kind === 'option').map((t) => t.name),
+  );
+  const usageError = (msg: string): number => {
+    printError(msg, useColor);
+    return 3;
+  };
+
   // ── Version / Hilfe ────────────────────────────────────────────
   if (values.version) {
     process.stdout.write(`${VERSION}\n`);
@@ -166,6 +178,8 @@ async function main(): Promise<number> {
       process.stdout.write(INIT_HELP);
       return 0;
     }
+    if (provided.has('json')) return usageError('`--json` is not valid for `init`.');
+    if (positionals.length > 1) return usageError(`Unexpected argument "${positionals[1]}" for init.`);
     const initOpts: Parameters<typeof runInitGenerator>[0] = { noColor: !useColor };
     if (values.output !== undefined) initOpts.outputPath = values.output;
     if (values.force) initOpts.force = values.force;
@@ -176,11 +190,25 @@ async function main(): Promise<number> {
       process.stdout.write(LIST_HELP);
       return 0;
     }
+    if (provided.has('output') || provided.has('force')) {
+      return usageError('`--output`/`--force` are only valid for `init`.');
+    }
+    if (positionals.length > 1) {
+      return usageError(`Unexpected argument "${positionals[1]}" for list-operations.`);
+    }
     return runListOperations({ json: values.json ?? false, noColor: !useColor });
   }
   if (subcommand !== undefined) {
     printError(`Unknown command "${subcommand}". Run "gitbulk --help" for usage.`, useColor);
     return 3;
+  }
+
+  // Subkommando-Optionen sind im Bulk-Flow ungültig (statt still ignoriert).
+  const strayOpts = ['output', 'force', 'json'].filter((o) => provided.has(o));
+  if (strayOpts.length > 0) {
+    return usageError(
+      `Option(s) ${strayOpts.map((o) => `--${o}`).join(', ')} are only valid for a subcommand (init / list-operations).`,
+    );
   }
 
   // ── Globale Optionen für den Bulk-Flow ─────────────────────────
