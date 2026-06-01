@@ -78,6 +78,15 @@ InModuleScope GitBulk {
                 $Body.fromRef.id -eq 'refs/heads/feat' -and $Body.toRef.id -eq 'refs/heads/main'
             }
         }
+
+        It 'fails in server mode when apiBaseUrl is missing (no Cloud fallback)' {
+            Mock Invoke-GitBulkHttp { throw 'should not be called' }
+            $cfg = @{ workspace = 'PROJ'; apiVariant = 'server'; targetBranch = 'main'; reviewers = @() }
+            $r = New-BitbucketPullRequest -BitbucketConfig $cfg -Token 'tok' -Ru 'repo' -SourceBranch 'feat' -Title 'T'
+            $r.Ok | Should -BeFalse
+            $r.Error | Should -Match 'requires apiBaseUrl'
+            Should -Invoke Invoke-GitBulkHttp -Times 0
+        }
     }
 
     Describe 'New-GitBulkPullRequest (dispatcher)' {

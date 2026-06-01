@@ -16,11 +16,18 @@ function New-BitbucketPullRequest {
     )
 
     $cloud = ([string]$BitbucketConfig.apiVariant) -ne 'server'
-    $defaultBase = 'https://api.bitbucket.org/2.0'
-    $apiBase = if ($BitbucketConfig.Contains('apiBaseUrl') -and $BitbucketConfig.apiBaseUrl) {
+    $hasBaseUrl = $BitbucketConfig.Contains('apiBaseUrl') -and $BitbucketConfig.apiBaseUrl
+    # Im Server-Modus MUSS apiBaseUrl gesetzt sein — sonst entstünde eine
+    # ungültige URL (api.bitbucket.org/rest/api/1.0/...). Klar fehlschlagen.
+    if (-not $cloud -and -not $hasBaseUrl) {
+        return @{ Ok = $false; Id = $null; Url = ''; StatusCode = 0
+            Error = 'Bitbucket Server mode (apiVariant: server) requires apiBaseUrl'
+        }
+    }
+    $apiBase = if ($hasBaseUrl) {
         ([string]$BitbucketConfig.apiBaseUrl).TrimEnd('/')
     } else {
-        $defaultBase
+        'https://api.bitbucket.org/2.0'
     }
     $workspace = [string]$BitbucketConfig.workspace
     $targetBranch = [string]$BitbucketConfig.targetBranch
@@ -28,7 +35,7 @@ function New-BitbucketPullRequest {
 
     # Authorization-Header: App-Passwörter (user:pass) → Basic, sonst Bearer.
     $authHeader = if ($Token.Contains(':')) {
-        'Basic ' + [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($Token))
+        'Basic ' + [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($Token))
     } else {
         "Bearer $Token"
     }
