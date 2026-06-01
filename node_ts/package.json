@@ -45,7 +45,6 @@
     "prepublishOnly": "npm run clean && npm run build"
   },
   "dependencies": {
-    "commander": "^12.1.0",
     "yaml": "^2.6.0",
     "zod": "^3.23.8"
   },
