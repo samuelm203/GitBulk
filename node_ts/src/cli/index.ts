@@ -3,13 +3,15 @@
  * GitBulk CLI — Einstiegspunkt.
  *
  * Verdrahtet alle Bausteine:
- *   1. Argument-Parsing via Commander
+ *   1. Argument-Parsing via node:util parseArgs (zero-dependency)
  *   2. Logger initialisieren (Level, Farbe)
  *   3. Git-Verfügbarkeit prüfen
  *   4. Config laden (Datei + Hybrid, oder rein interaktiv)
  *   5. PR-Adapter bauen
  *   6. Runner ausführen
  *   7. Summary drucken, Exit-Code setzen
+ *
+ * Subkommandos: `init`, `list-operations`. Alles andere ist der Bulk-Flow.
  *
  * Exit-Codes:
  *   0 — Alle RUs erfolgreich verarbeitet (auch wenn manche skipped sind)
@@ -20,8 +22,8 @@
  */
 
 import process from 'node:process';
+import { parseArgs } from 'node:util';
 
-import { Command } from 'commander';
 import * as colors from '../utils/colors.js';
 
 import { loadConfig, ConfigError } from '../config/loader.js';
@@ -36,84 +38,75 @@ import { runListOperations } from './list-operations.js';
 import { filterRus } from './filter-rus.js';
 import { VERSION } from '../index.js';
 
-/** Optionen des `init`-Subkommandos. */
-interface InitCommandOptions {
-  output?: string;
-  force?: boolean;
-}
+/** Allgemeiner Hilfetext (Pendant zur früheren Commander-Hilfe). */
+const HELP = `gitbulk — Configurable CLI tool for bulk operations on Git repositories.
 
-/** Optionen des `list-operations`-Subkommandos. */
-interface ListOperationsCommandOptions {
-  json?: boolean;
-}
+Usage:
+  gitbulk [options]                  Run the bulk flow (config -> per-RU git + PR)
+  gitbulk init [options]             Generate an operations config or a code-change script
+  gitbulk list-operations [--json]   List the available declarative operations
 
-/** Callbacks für die Subkommandos (setzen jeweils das Subkommando-Ergebnis). */
-interface SubcommandHandlers {
-  onInit: (cmdOpts: InitCommandOptions, globalOpts: { color: boolean }) => Promise<void>;
-  onListOperations: (
-    cmdOpts: ListOperationsCommandOptions,
-    globalOpts: { color: boolean },
-  ) => void;
-}
+Options:
+  -c, --config <path>    Path to a config file (.yaml, .yml, .json, .js, .mjs, .ts)
+  -m, --mode <mode>      Config mode: "strict" or "hybrid" (default: hybrid)
+      --dry-run          Do not perform any write operations (push, PR API)
+      --tui              Interactive terminal UI with live per-RU progress
+      --only <rus>       Only process these RUs (comma-separated subset)
+  -l, --log-level <lvl>  Log level: ${LOG_LEVELS.join(' | ')} (default: info)
+      --no-color         Disable colored output
+  -v, --version          Print version and exit
+  -h, --help             Show this help and exit
+
+init options:
+  -o, --output <path>    Output file path
+  -f, --force            Overwrite the output file if it already exists
+
+Exit codes: 0 ok | 1 a PR failed | 2 a fatal per-RU error | 3 setup error | 130 SIGINT
+`;
+
+/** Hilfetext für `gitbulk init`. */
+const INIT_HELP = `gitbulk init — Generate an operations config or a standalone .mjs/.ts code-change script.
+
+Options:
+  -o, --output <path>   Output file path
+  -f, --force           Overwrite the output file if it already exists
+      --no-color        Disable colored output
+`;
+
+/** Hilfetext für `gitbulk list-operations`. */
+const LIST_HELP = `gitbulk list-operations — List all available declarative operations and their parameters.
+
+Options:
+      --json   Output as JSON (machine-readable)
+`;
 
 /**
- * Baut die Commander-Program-Instanz inkl. `init`- und `list-operations`-Subkommandos.
+ * Parst die CLI-Argumente mit node:util parseArgs.
  *
- * @param handlers - Callbacks, die bei den jeweiligen Subkommandos laufen.
+ * Alle Optionen (global + Subkommando) sind in einem Spec definiert; das erste
+ * Positional bestimmt das Subkommando. Wirft bei unbekannter Option / fehlendem
+ * Wert (vom Aufrufer abgefangen → Exit 3).
  */
-function buildProgram(handlers: SubcommandHandlers): Command {
-  const program = new Command();
-
-  program
-    .name('gitbulk')
-    .description('Configurable CLI tool for bulk operations on Git repositories.')
-    .version(VERSION, '-v, --version', 'Print version and exit')
-    .option('-c, --config <path>', 'Path to a config file (.yaml, .yml, .json, .js, .mjs, .ts)')
-    .option(
-      '-m, --mode <mode>',
-      'Config mode: "strict" (file must be complete) or "hybrid" (prompt for missing fields)',
-      'hybrid',
-    )
-    .option('--dry-run', 'Do not perform any write operations (push, PR API)', false)
-    .option('--tui', 'Run with an interactive terminal UI showing live per-RU progress', false)
-    .option(
-      '--only <rus>',
-      'Only process these RUs (comma-separated subset of the configured RUs)',
-    )
-    .option(
-      '-l, --log-level <level>',
-      `Log level: ${LOG_LEVELS.join(' | ')}`,
-      'info',
-    )
-    .option('--no-color', 'Disable colored output');
-
-  // WICHTIG: Sobald Subkommandos registriert sind, zeigt Commander bei einem
-  // Aufruf OHNE Subkommando (dem regulären Bulk-Flow, z. B.
-  // `gitbulk --config x.yaml`) standardmäßig nur die Hilfe und beendet sich mit
-  // Code 1. Eine (no-op) Root-Action verhindert das — die eigentliche Bulk-Logik
-  // läuft danach in main() nach parseAsync, nicht hier.
-  program.action(() => {
-    /* no-op: Bulk-Flow wird in main() ausgeführt */
+function parseCliArgs() {
+  return parseArgs({
+    args: process.argv.slice(2),
+    allowPositionals: true,
+    tokens: true,
+    options: {
+      config: { type: 'string', short: 'c' },
+      mode: { type: 'string', short: 'm', default: 'hybrid' },
+      'dry-run': { type: 'boolean', default: false },
+      tui: { type: 'boolean', default: false },
+      only: { type: 'string' },
+      'log-level': { type: 'string', short: 'l', default: 'info' },
+      'no-color': { type: 'boolean', default: false },
+      version: { type: 'boolean', short: 'v', default: false },
+      help: { type: 'boolean', short: 'h', default: false },
+      output: { type: 'string', short: 'o' },
+      force: { type: 'boolean', short: 'f', default: false },
+      json: { type: 'boolean', default: false },
+    },
   });
-
-  program
-    .command('init')
-    .description('Interactively generate an operations config or a standalone .mjs/.ts code-change script')
-    .option('-o, --output <path>', 'Output file path')
-    .option('-f, --force', 'Overwrite the output file if it already exists', false)
-    .action(async (cmdOpts: InitCommandOptions) => {
-      await handlers.onInit(cmdOpts, program.opts<{ color: boolean }>());
-    });
-
-  program
-    .command('list-operations')
-    .description('List all available declarative operations and their parameters')
-    .option('--json', 'Output as JSON (machine-readable)', false)
-    .action((cmdOpts: ListOperationsCommandOptions) => {
-      handlers.onListOperations(cmdOpts, program.opts<{ color: boolean }>());
-    });
-
-  return program;
 }
 
 /**
@@ -147,37 +140,87 @@ function exitCodeFromSummary(summary: Awaited<ReturnType<typeof runBulk>>): numb
  * Hauptfunktion. Wirft NICHT — Fehler werden geloggt und Exit-Code wird gesetzt.
  */
 async function main(): Promise<number> {
-  // Subkommandos (init / list-operations) laufen während parseAsync. Das
-  // Ergebnis fangen wir ab, damit der reguläre Bulk-Flow danach NICHT läuft.
-  let subcommandResult: number | undefined;
-  const program = buildProgram({
-    onInit: async (cmdOpts, globalOpts) => {
-      const initOpts: Parameters<typeof runInitGenerator>[0] = { noColor: !globalOpts.color };
-      if (cmdOpts.output !== undefined) initOpts.outputPath = cmdOpts.output;
-      if (cmdOpts.force !== undefined) initOpts.force = cmdOpts.force;
-      subcommandResult = await runInitGenerator(initOpts);
-    },
-    onListOperations: (cmdOpts, globalOpts) => {
-      subcommandResult = runListOperations({
-        json: cmdOpts.json ?? false,
-        noColor: !globalOpts.color,
-      });
-    },
-  });
-  await program.parseAsync(process.argv);
-  if (subcommandResult !== undefined) {
-    return subcommandResult;
+  let parsed: ReturnType<typeof parseCliArgs>;
+  try {
+    parsed = parseCliArgs();
+  } catch (err) {
+    process.stderr.write(`${(err as Error).message}\n\n${HELP}`);
+    return 3;
+  }
+  const { values, positionals } = parsed;
+  const useColor = !values['no-color'];
+  const subcommand = positionals[0];
+
+  // Tatsächlich übergebene Optionen (nicht nur Defaults), damit wir
+  // Subkommando-Optionen im falschen Kontext als Fehler melden können statt sie
+  // still zu ignorieren (entspricht dem strengen Commander-Verhalten von früher).
+  const provided = new Set<string>(
+    parsed.tokens.filter((t) => t.kind === 'option').map((t) => t.name),
+  );
+  const usageError = (msg: string): number => {
+    printError(msg, useColor);
+    return 3;
+  };
+
+  // ── Version / Hilfe ────────────────────────────────────────────
+  if (values.version) {
+    process.stdout.write(`${VERSION}\n`);
+    return 0;
+  }
+  if (values.help && subcommand === undefined) {
+    process.stdout.write(HELP);
+    return 0;
   }
 
-  const opts = program.opts<{
-    config?: string;
-    mode: string;
-    dryRun: boolean;
-    tui: boolean;
-    only?: string;
-    logLevel: string;
-    color: boolean;
-  }>();
+  // ── Subkommando-Dispatch ───────────────────────────────────────
+  if (subcommand === 'init') {
+    if (values.help) {
+      process.stdout.write(INIT_HELP);
+      return 0;
+    }
+    if (provided.has('json')) return usageError('`--json` is not valid for `init`.');
+    if (positionals.length > 1) return usageError(`Unexpected argument "${positionals[1]}" for init.`);
+    const initOpts: Parameters<typeof runInitGenerator>[0] = { noColor: !useColor };
+    if (values.output !== undefined) initOpts.outputPath = values.output;
+    if (values.force) initOpts.force = values.force;
+    return runInitGenerator(initOpts);
+  }
+  if (subcommand === 'list-operations') {
+    if (values.help) {
+      process.stdout.write(LIST_HELP);
+      return 0;
+    }
+    if (provided.has('output') || provided.has('force')) {
+      return usageError('`--output`/`--force` are only valid for `init`.');
+    }
+    if (positionals.length > 1) {
+      return usageError(`Unexpected argument "${positionals[1]}" for list-operations.`);
+    }
+    return runListOperations({ json: values.json ?? false, noColor: !useColor });
+  }
+  if (subcommand !== undefined) {
+    printError(`Unknown command "${subcommand}". Run "gitbulk --help" for usage.`, useColor);
+    return 3;
+  }
+
+  // Subkommando-Optionen sind im Bulk-Flow ungültig (statt still ignoriert).
+  const strayOpts = ['output', 'force', 'json'].filter((o) => provided.has(o));
+  if (strayOpts.length > 0) {
+    return usageError(
+      `Option(s) ${strayOpts.map((o) => `--${o}`).join(', ')} are only valid for a subcommand (init / list-operations).`,
+    );
+  }
+
+  // ── Globale Optionen für den Bulk-Flow ─────────────────────────
+  const opts = {
+    config: values.config,
+    mode: values.mode ?? 'hybrid',
+    dryRun: values['dry-run'] ?? false,
+    tui: values.tui ?? false,
+    only: values.only,
+    logLevel: values['log-level'] ?? 'info',
+    color: useColor,
+  };
 
   // ── Logger initialisieren ──────────────────────────────────────
   let logLevel: LogLevel;
@@ -188,7 +231,6 @@ async function main(): Promise<number> {
     return 3;
   }
 
-  const useColor = opts.color;
   const logger = createLogger({ level: logLevel, noColor: !useColor });
   setDefaultLogger(logger);
 
