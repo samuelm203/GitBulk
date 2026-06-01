@@ -34,8 +34,17 @@ Register-GitBulkOperation @{
 
         $original = [System.IO.File]::ReadAllText($file)
 
-        # Idempotenz: groupId + artifactId zusammen bereits vorhanden?
-        if ($original.Contains("<artifactId>$artifactId</artifactId>") -and $original.Contains("<groupId>$groupId</groupId>")) {
+        # Idempotenz: groupId + artifactId zusammen im SELBEN <dependency>-Element?
+        # (Beide Tags nur unabhängig voneinander zu suchen wäre ein False Positive,
+        # wenn sie aus verschiedenen <dependency>-Blöcken stammen.)
+        $alreadyPresent = $false
+        foreach ($dep in [regex]::Matches($original, '(?s)<dependency\s*>.*?</dependency>')) {
+            if ($dep.Value.Contains("<groupId>$groupId</groupId>") -and $dep.Value.Contains("<artifactId>$artifactId</artifactId>")) {
+                $alreadyPresent = $true
+                break
+            }
+        }
+        if ($alreadyPresent) {
             return @{ Changed = $false; Message = "Dependency ${groupId}:${artifactId} already present — skipping." }
         }
 

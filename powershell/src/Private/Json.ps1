@@ -7,7 +7,7 @@
 # 2-Leerzeichen-Einrückung; [hashtable] verliert zudem die Reihenfolge), daher
 # ein eigener, kleiner Serializer + ordnungserhaltender Parser.
 
-# Escapt einen String für die JSON-Ausgabe (wie JSON.stringify: nur ", \, die
+# Maskiert einen String für die JSON-Ausgabe (wie JSON.stringify: nur ", \, die
 # üblichen Steuerzeichen-Kürzel und sonstige Steuerzeichen < 0x20 als \uXXXX —
 # KEIN Escapen von /, <, >, ' oder Unicode). Zeichenweise über Codepoints, damit
 # keine Steuerzeichen-Literale im Quelltext stehen.

@@ -215,6 +215,15 @@ InModuleScope GitBulk {
                 $res.Changed | Should -BeFalse
                 $res.Message | Should -Match 'already present'
             }
+            It 'still adds when groupId and artifactId only match across different dependencies' {
+                # org.foo + bar kommen vor, aber NICHT im selben <dependency> → kein False Positive.
+                $root = newRepoDir
+                writeText (Join-Path $root 'pom.xml') "<project>`n  <dependencies>`n    <dependency>`n      <groupId>org.foo</groupId>`n      <artifactId>other</artifactId>`n    </dependency>`n    <dependency>`n      <groupId>com.bar</groupId>`n      <artifactId>bar</artifactId>`n    </dependency>`n  </dependencies>`n</project>`n"
+                $res = applyOp -Type 'maven-add-dependency' -Params @{ groupId = 'org.foo'; artifactId = 'bar'; version = '1.0.0' } -RepoDir $root
+                $res.Changed | Should -BeTrue
+                $txt = readText (Join-Path $root 'pom.xml')
+                ([regex]::Matches($txt, '<dependency\s*>')).Count | Should -Be 3
+            }
             It 'errors when there is no project-level <dependencies> block' {
                 $root = newRepoDir
                 writeText (Join-Path $root 'pom.xml') "<project>`n  <dependencyManagement>`n    <dependencies>`n    </dependencies>`n  </dependencyManagement>`n</project>`n"
