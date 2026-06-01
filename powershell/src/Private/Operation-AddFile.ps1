@@ -30,8 +30,11 @@ Register-GitBulkOperation @{
             }
         }
 
+        # .NET-API statt New-Item: nimmt einen LITERALEN Pfad (keine Wildcard-
+        # Interpretation von [ ] * ?), ist idempotent und legt fehlende
+        # Zwischenverzeichnisse an — konsistent zum WriteAllText darunter.
         $dir = [System.IO.Path]::GetDirectoryName($file)
-        if ($dir -and -not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+        if ($dir) { [System.IO.Directory]::CreateDirectory($dir) | Out-Null }
         [System.IO.File]::WriteAllText($file, $content)
         return @{ Changed = $true; Message = "Wrote $rel" }
     }
