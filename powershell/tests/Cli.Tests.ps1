@@ -59,7 +59,7 @@ Describe 'Invoke-GitBulk' {
     }
 
     It 'returns 3 on a config error (missing file)' {
-        $code = Invoke-GitBulk -ConfigPath (Join-Path ([System.IO.Path]::GetTempPath()) 'does-not-exist-xyz.json') -NoColor -ErrorAction SilentlyContinue
+        $code = Invoke-GitBulk -ConfigPath (Join-Path ([System.IO.Path]::GetTempPath()) 'does-not-exist-xyz.json') -NoColor
         $code | Should -Be 3
     }
 
@@ -70,7 +70,7 @@ Describe 'Invoke-GitBulk' {
         [System.IO.File]::WriteAllText($script, "Set-Content -Path 'change.txt' -Value 'changed'")
         $cfgFile = writeConfigFile -Workspace $ws -Rus @('repo-a') -Script $script
 
-        $code = Invoke-GitBulk -ConfigPath $cfgFile -Only 'ghost' -NoColor -ErrorAction SilentlyContinue
+        $code = Invoke-GitBulk -ConfigPath $cfgFile -Only 'ghost' -NoColor
         $code | Should -Be 3
     }
 
@@ -82,10 +82,15 @@ Describe 'Invoke-GitBulk' {
         [System.IO.File]::WriteAllText($script, "Set-Content -Path 'change.txt' -Value 'changed'")
         $cfgFile = writeConfigFile -Workspace $ws -Rus @('repo-a', 'repo-b') -Script $script
 
-        # Kein Throw, Exit 0 (dry-run). Die Filter-Wirkung selbst ist in filterRus-Logik
-        # abgedeckt; hier zählt, dass --only akzeptiert wird und der Lauf sauber endet.
         $code = Invoke-GitBulk -ConfigPath $cfgFile -Only 'repo-a' -NoColor
         $code | Should -Be 0
+
+        # Konkreter Filter-Nachweis: im Dry-Run legt nur der verarbeitete RU den
+        # Feature-Branch lokal an; der gefilterte RU bleibt unberührt.
+        $branchInA = & git -C (Join-Path $ws 'repo-a') branch --list 'AKB-1-feature/x'
+        $branchInB = & git -C (Join-Path $ws 'repo-b') branch --list 'AKB-1-feature/x'
+        $branchInA | Should -Not -BeNullOrEmpty
+        $branchInB | Should -BeNullOrEmpty
     }
 }
 

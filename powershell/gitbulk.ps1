@@ -4,7 +4,7 @@
     GitBulk-CLI-Einstiegsskript. Lädt das Modul und führt Invoke-GitBulk aus.
 
 .EXAMPLE
-    ./gitbulk.ps1 -Config ./gitbulk.config.yaml --DryRun
+    ./gitbulk.ps1 -Config ./gitbulk.config.yaml -DryRun
     ./gitbulk.ps1 -Config ./gitbulk.config.json -Only repo-a,repo-b
 #>
 [CmdletBinding()]
