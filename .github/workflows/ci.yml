@@ -114,6 +114,12 @@ jobs:
       - name: Install PowerShell modules
         shell: pwsh
         run: |
+          # PSGallery ist auf den (Windows-)Runnern gelegentlich nicht registriert
+          # ("No repository with the name 'PSGallery' was found") — vor dem
+          # Trust/Install sicherstellen, dass das Default-Repo existiert.
+          if (-not (Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue)) {
+            Register-PSRepository -Default -ErrorAction SilentlyContinue
+          }
           Set-PSRepository PSGallery -InstallationPolicy Trusted
           Install-Module Pester -MinimumVersion 5.5.0 -Force -Scope CurrentUser -SkipPublisherCheck
           Install-Module PSScriptAnalyzer -Force -Scope CurrentUser
