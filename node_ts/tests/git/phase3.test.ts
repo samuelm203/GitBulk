@@ -7,7 +7,7 @@
 
 import { describe, it, before } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, writeFileSync } from 'node:fs';
+import { existsSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { runPhase3 } from '../../src/git/phase3.js';
@@ -60,6 +60,60 @@ describe('Phase 3 - 3.1 Existence check', () => {
       assert.equal(result.processed, false);
       assert.equal(result.prStatus, 'empty');
       assert.ok(result.notes.some((n) => n.includes('not found locally')));
+    } finally {
+      cleanup(ws);
+    }
+  });
+});
+
+describe('Phase 3 - 3.1 existing directory that is not a git repo', () => {
+  it('reports "exists but is not a git repository" instead of "not found"', async () => {
+    const ws = createWorkspace();
+    try {
+      // Plain directory (no `git init`) named like the RU.
+      mkdirSync(join(ws, 'repo-a'));
+      const config = makeConfig(ws, writeShellScript(ws, 'exit 0'));
+
+      const result = await runPhase3('repo-a', config);
+
+      assert.equal(result.processed, false);
+      assert.equal(result.fatalError, undefined);
+      assert.ok(result.notes.some((n) => n.includes('not a git repository')));
+    } finally {
+      cleanup(ws);
+    }
+  });
+});
+
+describe('Phase 3 - 3.2 unresolved merge conflicts', () => {
+  it('skips the RU (non-fatal) instead of crashing on git stash', async () => {
+    const ws = createWorkspace();
+    try {
+      const { ruPath } = setupRu(ws, 'repo-a');
+      const g = (args: string[]): Promise<unknown> =>
+        runGitChecked(args, { cwd: ruPath, timeoutMs: 5000 });
+
+      // Create a real unmerged state: base commit, diverging branch + master, merge.
+      writeFileSync(join(ruPath, 'conflict.txt'), 'base\n');
+      await g(['add', '-A']);
+      await g(['commit', '-m', 'base']);
+      await g(['checkout', '-b', 'other']);
+      writeFileSync(join(ruPath, 'conflict.txt'), 'other\n');
+      await g(['add', '-A']);
+      await g(['commit', '-m', 'other']);
+      await g(['checkout', 'master']);
+      writeFileSync(join(ruPath, 'conflict.txt'), 'mainline\n');
+      await g(['add', '-A']);
+      await g(['commit', '-m', 'mainline']);
+      // `git merge` exits non-zero on conflict → runGitChecked throws; ignore it,
+      // the working tree is now left with an unmerged path.
+      await g(['merge', 'other']).catch(() => undefined);
+
+      const result = await runPhase3('repo-a', makeConfig(ws, writeShellScript(ws, 'exit 0')));
+
+      assert.equal(result.processed, false);
+      assert.equal(result.fatalError, undefined);
+      assert.ok(result.notes.some((n) => n.includes('merge conflicts')));
     } finally {
       cleanup(ws);
     }
