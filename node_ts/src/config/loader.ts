@@ -27,6 +27,7 @@ import {
   type PartialGitBulkConfig,
 } from './schema.js';
 import { runInteractivePrompts } from '../cli/prompts.js';
+import { getDefaultLogger } from '../utils/logger.js';
 
 /**
  * Unterstützte Config-Dateiformate.
@@ -121,6 +122,15 @@ async function parseDataFile(absolutePath: string, ext: SupportedExtension): Pro
  * (z. B. `npm run dev`), sonst kann Node die Datei nicht auflösen.
  */
 async function importCodeFile(absolutePath: string): Promise<unknown> {
+  // SICHERHEIT: Eine .js/.mjs/.ts-Config wird via dynamischem import() geladen
+  // und ihr Default-Export ggf. als Funktion AUSGEFÜHRT — das ist beliebiger
+  // Code. Nur Configs aus vertrauenswürdiger Quelle verwenden. Wir warnen
+  // explizit, damit das nicht unbemerkt passiert. Für nicht-vertrauenswürdige
+  // Eingaben ein Daten-Format (.yaml/.json) nutzen.
+  getDefaultLogger().warn(
+    `Executing code config "${absolutePath}" — this runs arbitrary code. Only use code configs you trust (prefer .yaml/.json otherwise).`,
+  );
+
   let mod: { default?: unknown; [key: string]: unknown };
   try {
     // Wichtig: file:// URL, damit absolute Pfade unter Windows funktionieren.

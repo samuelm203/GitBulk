@@ -13,10 +13,10 @@
  */
 
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { z } from 'zod';
 
 import { registerOperation, type Operation, type OperationContext, type OperationResult } from './types.js';
+import { resolveInRepo } from './paths.js';
 
 const schema = z.object({
   /** Maven groupId, z. B. "org.apache.commons". */
@@ -66,7 +66,13 @@ const operation: Operation<MavenAddDependencyParams> = {
   schema,
 
   apply(params: MavenAddDependencyParams, ctx: OperationContext): OperationResult {
-    const pomFile = join(ctx.repoDir, params.pomPath);
+    // Pfad-Sicherheit: pomPath muss innerhalb des Repos liegen (kein Ausbruch
+    // via absolutem Pfad oder `..`).
+    const resolved = resolveInRepo(ctx.repoDir, params.pomPath);
+    if (!resolved.ok) {
+      return { changed: false, message: resolved.error, error: resolved.error };
+    }
+    const pomFile = resolved.path;
 
     if (!existsSync(pomFile)) {
       return { changed: false, message: `No ${params.pomPath} found — skipping.` };
