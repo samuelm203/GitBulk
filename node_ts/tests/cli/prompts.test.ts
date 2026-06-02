@@ -7,12 +7,18 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import type { Interface } from 'node:readline/promises';
+import { writeFileSync, mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import {
   promptUntilValid,
   confirmConfig,
+  collectInteractiveConfig,
   type InteractiveInputResult,
 } from '../../src/cli/prompts.js';
+import { interactiveToConfigInput } from '../../src/config/loader.js';
+import { GitBulkConfigSchema } from '../../src/config/schema.js';
 import {
   validateRuList,
   validateYesNo,
@@ -166,6 +172,8 @@ describe('cli/prompts.ts', () => {
         commitMessage: 'Fix: updated config',
         prSummary: 'Updated configuration',
         createPrOnError: true,
+        prPlatform: 'bitbucket',
+        bitbucket: { workspace: 'ws', targetBranch: 'master', reviewers: [] },
       };
 
       const { rl } = createMockReadline(['Y']);
@@ -191,6 +199,8 @@ describe('cli/prompts.ts', () => {
         commitMessage: 'Fix',
         prSummary: 'Summary',
         createPrOnError: false,
+        prPlatform: 'bitbucket',
+        bitbucket: { workspace: 'ws', targetBranch: 'master', reviewers: [] },
       };
 
       const { rl } = createMockReadline(['N']);
@@ -212,6 +222,8 @@ describe('cli/prompts.ts', () => {
         commitMessage: 'Fix',
         prSummary: 'Summary',
         createPrOnError: false,
+        prPlatform: 'bitbucket',
+        bitbucket: { workspace: 'ws', targetBranch: 'master', reviewers: [] },
       };
 
       const { rl } = createMockReadline(['Y']);
@@ -232,6 +244,8 @@ describe('cli/prompts.ts', () => {
         commitMessage: 'Fix',
         prSummary: 'Summary',
         createPrOnError: true,
+        prPlatform: 'bitbucket',
+        bitbucket: { workspace: 'ws', targetBranch: 'master', reviewers: [] },
       };
 
       const { rl } = createMockReadline(['Y']);
@@ -252,6 +266,8 @@ describe('cli/prompts.ts', () => {
         commitMessage: 'Fix',
         prSummary: 'Summary',
         createPrOnError: false,
+        prPlatform: 'bitbucket',
+        bitbucket: { workspace: 'ws', targetBranch: 'master', reviewers: [] },
       };
 
       const { rl } = createMockReadline(['invalid', 'maybe', 'n']);
@@ -274,6 +290,8 @@ describe('cli/prompts.ts', () => {
         commitMessage: 'Multiple repos update',
         prSummary: 'Feature for 3 repos',
         createPrOnError: true,
+        prPlatform: 'bitbucket',
+        bitbucket: { workspace: 'ws', targetBranch: 'master', reviewers: [] },
       };
 
       const { rl } = createMockReadline(['YES']);
@@ -287,6 +305,84 @@ describe('cli/prompts.ts', () => {
       assert.match(logs.stdout, /repo-a, repo-b, repo-c/);
       assert.match(logs.stdout, /ABC-999/);
     });
+  });
+});
+
+describe('collectInteractiveConfig', () => {
+  it('collects a script-based config with a bitbucket platform', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'gb-prompts-'));
+    const scriptPath = join(dir, 'change.sh');
+    writeFileSync(scriptPath, '#!/bin/sh\nexit 0\n');
+
+    const { rl } = createMockReadline([
+      'repo-a, repo-b', // RUs
+      'AKB-1234', // ticket
+      'feature/x', // branch
+      '1', // code change kind = script
+      scriptPath, // script path (must exist)
+      'chore: update', // commit message
+      'Update everything', // PR summary
+      'n', // createPrOnError
+      '1', // platform = bitbucket
+      'my-workspace', // workspace
+      '', // target branch → default master
+      '', // reviewers → none
+    ]);
+
+    let result!: InteractiveInputResult;
+    await captureLogs(async () => {
+      result = await collectInteractiveConfig(rl as Interface);
+    });
+
+    assert.deepEqual(result.rus, ['repo-a', 'repo-b']);
+    assert.equal(result.script, scriptPath);
+    assert.equal(result.operations, undefined);
+    assert.equal(result.createPrOnError, false);
+    assert.equal(result.prPlatform, 'bitbucket');
+    assert.equal(result.bitbucket?.workspace, 'my-workspace');
+    assert.equal(result.bitbucket?.targetBranch, 'master');
+    assert.deepEqual(result.bitbucket?.reviewers, []);
+
+    // The collected result builds a valid config (no env vars needed).
+    const parsed = GitBulkConfigSchema.safeParse(interactiveToConfigInput(result));
+    assert.equal(parsed.success, true);
+  });
+
+  it('collects an operations-based config with a github platform', async () => {
+    const { rl } = createMockReadline([
+      'r1', // RUs
+      'AKB-1', // ticket
+      'b', // branch
+      '2', // code change kind = operations
+      '2', // select operation #2 = delete-file (alphabetical order)
+      'old.txt', // delete-file: path
+      'd', // finish operations
+      'msg', // commit message
+      'summary', // PR summary
+      'y', // createPrOnError
+      '2', // platform = github
+      'acme', // owner
+      '', // target branch → default main
+      'alice, bob', // reviewers
+    ]);
+
+    let result!: InteractiveInputResult;
+    await captureLogs(async () => {
+      result = await collectInteractiveConfig(rl as Interface);
+    });
+
+    assert.equal(result.script, undefined);
+    assert.equal(result.operations?.length, 1);
+    assert.equal(result.operations?.[0]?.type, 'delete-file');
+    assert.equal(result.operations?.[0]?.params.path, 'old.txt');
+    assert.equal(result.createPrOnError, true);
+    assert.equal(result.prPlatform, 'github');
+    assert.equal(result.github?.owner, 'acme');
+    assert.equal(result.github?.targetBranch, 'main');
+    assert.deepEqual(result.github?.reviewers, ['alice', 'bob']);
+
+    const parsed = GitBulkConfigSchema.safeParse(interactiveToConfigInput(result));
+    assert.equal(parsed.success, true);
   });
 });
 

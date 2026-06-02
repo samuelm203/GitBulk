@@ -300,43 +300,50 @@ export async function loadConfig(options: LoadConfigOptions = {}): Promise<GitBu
 }
 
 /**
- * Erstellt die finale Config aus rein interaktiven Eingaben.
- *
- * Da der interaktive Pfad keine Plattform-Auswahl umfasst (das wäre
- * zu viel für die Phase-1-Sequenz), wird hier verlangt, dass mindestens
- * der `prPlatform`- und Plattform-Block via Env-Variablen vorgegeben sind —
- * sonst wirft die Validierung einen erklärenden Fehler.
- *
- * Für den reinen Interaktiv-Modus ohne PR-Plattform-Settings empfehlen
- * wir den User auf den Hybrid-Modus zu schicken.
+ * Übersetzt das interaktive Ergebnis in das vom Schema erwartete Roh-Objekt:
+ * - `operations` werden flach gemacht (`{ type, ...params }`),
+ * - der passende Plattform-Block (`bitbucket`/`github`) wird gesetzt.
+ * Tokens kommen weiterhin zur Laufzeit aus Env-Variablen (nicht hier).
+ */
+export function interactiveToConfigInput(
+  interactive: Awaited<ReturnType<typeof runInteractivePrompts>>,
+): Record<string, unknown> {
+  const candidate: Record<string, unknown> = {
+    rus: interactive.rus,
+    ticket: interactive.ticket,
+    branch: interactive.branch,
+    commitMessage: interactive.commitMessage,
+    prSummary: interactive.prSummary,
+    createPrOnError: interactive.createPrOnError,
+    prPlatform: interactive.prPlatform,
+  };
+  if (interactive.script !== undefined) candidate.script = interactive.script;
+  if (interactive.operations !== undefined) {
+    candidate.operations = interactive.operations.map((o) => ({ type: o.type, ...o.params }));
+  }
+  if (interactive.prPlatform === 'bitbucket' && interactive.bitbucket) {
+    candidate.bitbucket = { ...interactive.bitbucket };
+  }
+  if (interactive.prPlatform === 'github' && interactive.github) {
+    candidate.github = { ...interactive.github };
+  }
+  return candidate;
+}
+
+/**
+ * Erstellt die finale Config aus rein interaktiven Eingaben. Der interaktive
+ * Modus erhebt inzwischen ALLE Pflichtfelder (inkl. PR-Plattform), daher ist
+ * kein Env-Variablen-Zwang mehr nötig.
  */
 function finalizeInteractiveOnly(
   interactive: Awaited<ReturnType<typeof runInteractivePrompts>>,
 ): GitBulkConfig {
-  const candidate = {
-    ...interactive,
-    prPlatform: process.env.GITBULK_PR_PLATFORM,
-    bitbucket: process.env.GITBULK_BITBUCKET_WORKSPACE
-      ? {
-          workspace: process.env.GITBULK_BITBUCKET_WORKSPACE,
-          apiBaseUrl: process.env.GITBULK_BITBUCKET_API_URL,
-          targetBranch: process.env.GITBULK_BITBUCKET_TARGET_BRANCH ?? 'master',
-          reviewers:
-            process.env.GITBULK_BITBUCKET_REVIEWERS?.split(',')
-              .map((s) => s.trim())
-              .filter(Boolean) ?? [],
-        }
-      : undefined,
-  };
-
-  const result = GitBulkConfigSchema.safeParse(candidate);
+  const result = GitBulkConfigSchema.safeParse(interactiveToConfigInput(interactive));
   if (!result.success) {
-    throw new ConfigError('Interactive-only mode requires PR platform settings via environment', [
-      ...formatZodIssues(result.error.issues),
-      '',
-      'Set GITBULK_PR_PLATFORM=bitbucket (or azure-devops) plus the matching workspace env vars,',
-      'or use a config file with --config to provide PR platform settings.',
-    ]);
+    throw new ConfigError(
+      'Interactive configuration is invalid',
+      formatZodIssues(result.error.issues),
+    );
   }
   return Object.freeze(result.data);
 }
@@ -349,7 +356,7 @@ function mergeAndFinalize(
   partial: PartialGitBulkConfig,
   interactive: Awaited<ReturnType<typeof runInteractivePrompts>>,
 ): GitBulkConfig {
-  const merged = { ...partial, ...interactive };
+  const merged = { ...partial, ...interactiveToConfigInput(interactive) };
   const result = GitBulkConfigSchema.safeParse(merged);
   if (!result.success) {
     throw new ConfigError('Merged config failed validation', formatZodIssues(result.error.issues));
