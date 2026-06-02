@@ -96,6 +96,29 @@ describe('Phase 3 - 3.5a Code-Change with diff', () => {
   });
 });
 
+describe('Phase 3 - re-run with existing feature branch', () => {
+  it('does not fail fatally when the feature branch already exists locally', async () => {
+    const ws = createWorkspace();
+    try {
+      setupRu(ws, 'repo-a');
+      const script = writeShellScript(ws, 'echo "modified" > new.txt');
+      const config = makeConfig(ws, script);
+
+      const first = await runPhase3('repo-a', config);
+      assert.equal(first.prStatus, 'create_PR');
+
+      // Second run on the SAME repo: the feature branch now exists locally.
+      // With `git checkout -B` it must be reset (re-run safe), not rejected with
+      // a fatal "a branch named '…' already exists".
+      const second = await runPhase3('repo-a', config);
+      assert.equal(second.fatalError, undefined);
+      assert.equal(second.prStatus, 'create_PR');
+    } finally {
+      cleanup(ws);
+    }
+  });
+});
+
 describe('Phase 3 - 3.5a Code-Change with no diff', () => {
   it('produces empty prStatus and deletes local feature branch', async () => {
     const ws = createWorkspace();

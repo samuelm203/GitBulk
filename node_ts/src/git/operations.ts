@@ -231,18 +231,26 @@ export function buildFeatureBranchName(ticket: string, branch: string): string {
 }
 
 /**
- * Legt einen neuen Branch an und wechselt darauf.
- * Flowchart: `git checkout -b [Branch]`
+ * Legt den Feature-Branch an und wechselt darauf.
+ * Flowchart: `git checkout -b [Branch]` — wir nutzen `-B` statt `-b`.
  *
- * @returns rohes Result — Aufrufer prüft `exitCode`, weil "Branch existiert
- *          schon" ein erwarteter Fall sein kann (z. B. wenn GitBulk auf
- *          demselben RU zweimal läuft).
+ * `-B` erstellt den Branch ODER setzt ihn zurück, falls er bereits existiert
+ * (auf den aktuellen HEAD = der frisch auf `origin/<sourceBranch>` zurück-
+ * gesetzte Quell-Branch). Das macht GitBulk RE-RUN-SICHER: läuft das Tool
+ * erneut auf einem RU, in dem der Feature-Branch lokal schon liegt (z. B. aus
+ * einem vorherigen Lauf), scheitert es nicht mehr fatal
+ * (`fatal: a branch named '…' already exists`), sondern startet sauber vom
+ * aktuellen Quell-Branch-Stand neu. Etwaige alte lokale Commits auf dem
+ * Feature-Branch werden dabei bewusst verworfen.
+ *
+ * @returns rohes Result — Aufrufer prüft `exitCode` (echte Fehler wie ein
+ *          ungültiger Branch-Name bleiben non-zero).
  */
 export async function createFeatureBranch(
   branchName: string,
   base: BaseGitOptions,
 ): Promise<GitCommandResult> {
-  return runGit(['checkout', '-b', branchName], toExecOpts(base, true));
+  return runGit(['checkout', '-B', branchName], toExecOpts(base, true));
 }
 
 // ──────────────────────────────────────────────────────────────────

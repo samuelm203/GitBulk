@@ -152,11 +152,14 @@ describe('createFeatureBranch + deleteLocalBranch', () => {
     assert.equal(r2.exitCode, 0);
   });
 
-  it('returns non-zero when creating duplicate branch', async () => {
+  it('re-creates an existing branch idempotently (-B, re-run safe)', async () => {
     const branch = `dup-${Date.now()}`;
-    await createFeatureBranch(branch, base);
-    const r = await createFeatureBranch(branch, base);
-    assert.notEqual(r.exitCode, 0);
+    const r1 = await createFeatureBranch(branch, base);
+    assert.equal(r1.exitCode, 0);
+    // Re-creating the same branch must NOT fail (it is reset, not rejected) —
+    // this is what makes a second GitBulk run on the same repo work.
+    const r2 = await createFeatureBranch(branch, base);
+    assert.equal(r2.exitCode, 0);
     // Cleanup
     await checkoutBranch('master', base);
     await deleteLocalBranch(branch, base);
