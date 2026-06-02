@@ -57,6 +57,33 @@ describe('validateRuList', () => {
     const r = validateRuList(['  ', '\t']);
     assert.equal(r.ok, false);
   });
+
+  it('accepts dotted / underscored repo names', () => {
+    const r = validateRuList(['my.repo', 'a_b', 'Repo123', 'x-y']);
+    assert.equal(r.ok, true);
+    if (r.ok) assert.deepEqual(r.value, ['my.repo', 'a_b', 'Repo123', 'x-y']);
+  });
+
+  it('rejects path-traversal and separators in RU names', () => {
+    for (const bad of ['../evil', 'a/b', 'a\\b', '..', '.', 'foo/../bar']) {
+      const r = validateRuList(['ok-repo', bad]);
+      assert.equal(r.ok, false, `expected "${bad}" to be rejected`);
+      if (!r.ok) assert.match(r.error, /invalid RU name/);
+    }
+  });
+
+  it('rejects RU names that could be misread as git options (leading dash)', () => {
+    const r = validateRuList(['-rf']);
+    assert.equal(r.ok, false);
+    if (!r.ok) assert.match(r.error, /invalid RU name/);
+  });
+
+  it('rejects RU names with whitespace or control characters', () => {
+    for (const bad of ['a b', 'a\tb', 'a\nb']) {
+      const r = validateRuList([bad]);
+      assert.equal(r.ok, false, `expected ${JSON.stringify(bad)} to be rejected`);
+    }
+  });
 });
 
 describe('validateBranchName', () => {

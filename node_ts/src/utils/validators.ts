@@ -20,11 +20,25 @@ import { resolve } from 'node:path';
 export type ValidationResult<T> = { ok: true; value: T } | { ok: false; error: string };
 
 /**
+ * Erlaubtes Muster für einen RU-Namen.
+ *
+ * Sicherheit: Ein RU-Name wird sowohl als Verzeichnis-Segment
+ * (`join(workspaceDir, ru)`) als auch als URL-Segment (`cloneBaseUrl/ru`) und
+ * als `git clone`-Argument verwendet. Wir erlauben daher nur ein einzelnes,
+ * harmloses Segment: beginnt alphanumerisch (kein führendes `-`, das git als
+ * Option fehldeuten könnte; kein `.`/`..`), danach nur Buchstaben, Ziffern,
+ * `.`, `_`, `-`. Das schließt Pfad-Separatoren (`/`, `\`), `..`-Traversal,
+ * Whitespace und Steuerzeichen aus.
+ */
+const RU_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+
+/**
  * Validiert die RU-Liste (Flowchart: `Is [config.rus] empty?`).
  *
  * - Erwartet komma-separierte Strings ODER bereits ein Array.
  * - Whitespace wird gestrippt, leere Einträge entfernt.
  * - Resultat darf nicht leer sein.
+ * - Jeder Name muss `RU_NAME_PATTERN` erfüllen (Path-Traversal-/Injection-Schutz).
  *
  * @param input - Roh-Eingabe (String aus Prompt oder Array aus Config)
  * @returns Bereinigtes Array der RU-Namen
@@ -35,6 +49,15 @@ export function validateRuList(input: string | readonly string[]): ValidationRes
 
   if (cleaned.length === 0) {
     return { ok: false, error: 'Error: RU list is missing' };
+  }
+
+  for (const name of cleaned) {
+    if (!RU_NAME_PATTERN.test(name)) {
+      return {
+        ok: false,
+        error: `Error: invalid RU name "${name}" — allowed: letters, digits, '.', '_', '-' (must start alphanumeric; no '/', '\\' or '..')`,
+      };
+    }
   }
 
   return { ok: true, value: cleaned };

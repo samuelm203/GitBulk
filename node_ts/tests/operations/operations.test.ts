@@ -157,6 +157,14 @@ describe('maven-add-dependency operation', () => {
     assert.ok(pom.includes('    <dependency>\n      <groupId>org.apache.commons'));
   });
 
+  it('rejects a pomPath that escapes the repo (path traversal)', async () => {
+    writePom('<project>\n  <dependencies>\n  </dependencies>\n</project>\n');
+    const r = await mavenOp.apply({ ...params, pomPath: '../evil.xml' } as never, makeCtx(workspace));
+    assert.equal(r.changed, false);
+    assert.ok(r.error, 'expected an error for an escaping pomPath');
+    assert.match(r.error ?? '', /escapes/i);
+  });
+
   it('is idempotent: does not add an existing dependency', async () => {
     writePom(
       [
