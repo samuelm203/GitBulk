@@ -11,12 +11,15 @@
  */
 
 import { join, isAbsolute } from 'node:path';
+import { homedir } from 'node:os';
+import { existsSync } from 'node:fs';
 
 import {
   isGitRepository,
   cloneRepo,
   readCurrentBranch,
   hasUncommittedChanges,
+  hasMergeConflicts,
   stashAutoBackup,
   fetchOrigin,
   checkoutSourceBranch,
@@ -70,10 +73,18 @@ export interface Phase3Result {
  * Baut den vollen Repo-Pfad aus Workspace-Dir und RU-Namen.
  * Tilde-Expansion (~) ist hier nicht im Schema vorgesehen — kommt aus dem CWD/ENV.
  */
+/** Expandiert ein führendes `~` / `~/` zum Home-Verzeichnis des Nutzers. */
+function expandTilde(p: string): string {
+  if (p === '~') return homedir();
+  if (p.startsWith('~/') || p.startsWith('~\\')) return join(homedir(), p.slice(2));
+  return p;
+}
+
 function resolveRepoPath(workspaceDir: string | undefined, ru: string): string {
-  if (workspaceDir === undefined) return join(process.cwd(), ru);
-  if (isAbsolute(ru)) return ru;
-  return join(workspaceDir, ru);
+  const expandedRu = expandTilde(ru);
+  if (isAbsolute(expandedRu)) return expandedRu;
+  const base = workspaceDir === undefined ? process.cwd() : expandTilde(workspaceDir);
+  return join(base, expandedRu);
 }
 
 /**
@@ -128,7 +139,12 @@ export async function runPhase3(ru: string, config: GitBulkConfig): Promise<Phas
         return result;
       }
     } else {
-      const msg = `[${ru}] not found locally, moving to next RU`;
+      // Genauere Diagnose: existiert das Verzeichnis (aber ohne `.git`) oder
+      // fehlt es ganz? Die bisherige "not found"-Meldung war irreführend, wenn
+      // der Ordner da war, aber kein Git-Repo ist.
+      const msg = existsSync(repoPath)
+        ? `[${ru}] exists but is not a git repository (no .git), moving to next RU`
+        : `[${ru}] not found locally, moving to next RU`;
       logger.warn(msg);
       result.notes.push(msg);
       return result;
@@ -158,6 +174,24 @@ export async function runPhase3(ru: string, config: GitBulkConfig): Promise<Phas
     return result;
   }
   logger.debug(`original branch: ${originalBranch}`);
+
+  // Ungelöste Merge-Konflikte: `git stash` scheitert hier ("could not write
+  // index"). Statt den ganzen Lauf-RU fatal abzubrechen, überspringen wir das
+  // Repo sauber mit einer Warnung (wie beim "not found locally"-Pfad).
+  try {
+    if (await hasMergeConflicts(base)) {
+      const msg = `[${ru}] has unresolved merge conflicts, skipping (resolve them manually first)`;
+      logger.warn(msg);
+      result.notes.push(msg);
+      result.processed = false;
+      return result;
+    }
+  } catch (err) {
+    const msg = `Could not check for merge conflicts: ${(err as Error).message}`;
+    logger.error(msg);
+    result.fatalError = msg;
+    return result;
+  }
 
   let isStashed = false;
   try {

@@ -162,6 +162,24 @@ export async function hasUncommittedChanges(base: BaseGitOptions): Promise<boole
 }
 
 /**
+ * Prüft, ob der Working Tree ungelöste Merge-Konflikte (unmerged paths) enthält.
+ *
+ * `git status --porcelain` markiert unmerged Einträge mit den Status-Codes
+ * `DD AU UD UA DU AA UU` (X oder Y == 'U', oder beide 'A', oder beide 'D').
+ * In diesem Zustand scheitert `git stash push` ("could not write index") —
+ * der Aufrufer sollte das RU dann sauber überspringen statt fatal abzubrechen.
+ */
+export async function hasMergeConflicts(base: BaseGitOptions): Promise<boolean> {
+  const result = await runGitChecked(['status', '--porcelain'], toExecOpts(base, false));
+  return result.stdout.split('\n').some((line) => {
+    if (line.length < 2) return false;
+    const x = line[0];
+    const y = line[1];
+    return x === 'U' || y === 'U' || (x === 'A' && y === 'A') || (x === 'D' && y === 'D');
+  });
+}
+
+/**
  * Stash mit dem im Flowchart definierten Marker.
  * Flowchart: `git stash -u -m 'AUTO BACKUP'` → `is_stashed = true`
  *
