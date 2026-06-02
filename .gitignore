@@ -38,6 +38,9 @@ Thumbs.db
 # Lokale Test-Konfigurationen
 gitbulk.local.config.*
 
+# Generierte `gitbulk init`-Artefakte (sollen nicht eingecheckt werden)
+gitbulk-change.*
+
 .idea/
 workspace.xml
 
