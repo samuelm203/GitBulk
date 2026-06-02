@@ -131,12 +131,15 @@ describe('Phase 3 - 3.5b Code-Change fails with diff', () => {
 
       assert.equal(result.prStatus, 'create_PR_with_Error');
 
-      // Check commit message on remote
+      // Check commit message on remote: the failure is flagged AND the
+      // configured commit message is preserved as context.
       const log = await runGitChecked(
         ['log', '-1', '--format=%s', 'origin/AKB-1234-feature/test'],
         { cwd: ruPath, timeoutMs: 5000 },
       );
       assert.match(log.stdout, /ERROR WHILE CODE CHANGE/);
+      assert.match(log.stdout, /feat: test/);
+      assert.equal(log.stdout.trim(), 'ERROR WHILE CODE CHANGE: feat: test');
     } finally {
       cleanup(ws);
     }
