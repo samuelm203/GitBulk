@@ -249,6 +249,21 @@ export function buildFeatureBranchName(ticket: string, branch: string): string {
 }
 
 /**
+ * Baut die Commit-Message aus Ticket und freier Message: `<ticket> <message>`.
+ *
+ * So trägt jeder Commit (und damit der PR) die Ticket-ID als Präfix — analog
+ * zum Feature-Branch-Namen. Ein bereits vorangestelltes identisches Ticket wird
+ * NICHT doppelt gesetzt (idempotent, falls der Nutzer das Ticket selbst eintippt).
+ */
+export function buildCommitMessage(ticket: string, message: string): string {
+  const t = ticket.trim();
+  const m = message.trim();
+  if (t.length === 0) return m;
+  if (m === t || m.startsWith(`${t} `)) return m;
+  return `${t} ${m}`;
+}
+
+/**
  * Legt den Feature-Branch an und wechselt darauf.
  * Flowchart: `git checkout -b [Branch]` — wir nutzen `-B` statt `-b`.
  *

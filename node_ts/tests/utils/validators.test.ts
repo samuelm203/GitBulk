@@ -179,6 +179,19 @@ describe('validateTicket', () => {
     const r = validateTicket('1234');
     assert.equal(r.ok, true);
   });
+
+  it('accepts multi-segment tickets', () => {
+    const r = validateTicket('ABC-123-DEF');
+    assert.equal(r.ok, true);
+    if (r.ok) assert.equal(r.value, 'ABC-123-DEF');
+  });
+
+  it('rejects leading, trailing and doubled hyphens', () => {
+    for (const bad of ['AKB-', '-AKB', 'A--B', '-', 'AKB--1234']) {
+      const r = validateTicket(bad);
+      assert.equal(r.ok, false, `expected "${bad}" to be rejected`);
+    }
+  });
 });
 
 describe('validateFilePath', () => {

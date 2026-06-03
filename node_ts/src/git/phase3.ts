@@ -26,6 +26,7 @@ import {
   resetHardToOrigin,
   cleanWorkingTree,
   buildFeatureBranchName,
+  buildCommitMessage,
   createFeatureBranch,
   executeCodeChange,
   stageAll,
@@ -364,9 +365,10 @@ export async function runPhase3(ru: string, config: GitBulkConfig): Promise<Phas
   // vermerkt — und die konfigurierte Message bleibt als Kontext erhalten (statt
   // sie zu verwerfen). So zeigt der Commit (und damit der PR, wenn
   // `createPrOnError` ihn erstellt) klar, dass die Änderung fehlschlug.
+  const baseMessage = buildCommitMessage(config.ticket, config.commitMessage);
   const commitMessage = codeChangeOk
-    ? config.commitMessage
-    : `ERROR WHILE CODE CHANGE: ${config.commitMessage}`;
+    ? baseMessage
+    : `ERROR WHILE CODE CHANGE: ${baseMessage}`;
   const commitResult = await commit(commitMessage, base);
   if (commitResult.exitCode !== 0) {
     const msg = `git commit failed: ${commitResult.stderr.trim() || commitResult.stdout.trim()}`;
