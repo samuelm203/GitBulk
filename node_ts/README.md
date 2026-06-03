@@ -403,6 +403,9 @@ The TUI works in both modes:
 Tip: combine with `--dry-run` to watch a full run safely without pushing anything. Use
 `--no-color` in environments without ANSI support; the spinner falls back to a static symbol.
 
+In TUI mode all log output is written to **stderr** so it never interferes with the live view on
+stdout — redirect with `2>run.log` if you want to capture the per-RU log alongside the UI.
+
 ---
 
 ## Architecture & how a run works

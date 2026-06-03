@@ -117,6 +117,51 @@ describe('Logger', () => {
     assert.match(stderr, /test error/);
   });
 
+  it('routes all output to injected streams (TUI mode: everything to stderr)', async () => {
+    // TUI-Konfiguration: stdout UND stderr zeigen auf denselben (Fehler-)Stream,
+    // damit der echte stdout exklusiv dem Live-Renderer gehört.
+    let injectedErr = '';
+    const errSink = {
+      write: (chunk: string | Uint8Array): boolean => {
+        injectedErr += typeof chunk === 'string' ? chunk : chunk.toString();
+        return true;
+      },
+    } as NodeJS.WritableStream;
+    const logger = createLogger({
+      level: 'warn',
+      noColor: true,
+      timestamps: false,
+      stdout: errSink,
+      stderr: errSink,
+    });
+
+    // process.stdout darf NICHT beschrieben werden (sonst Renderer-Kollision).
+    const { stdout: realStdout } = await captureOutput(() => {
+      logger.warn('a warning');
+      logger.error('an error');
+    });
+
+    assert.equal(realStdout, '', 'TUI logger must not write to the real stdout');
+    assert.match(injectedErr, /\[WARN\].*a warning/);
+    assert.match(injectedErr, /\[ERROR\].*an error/);
+  });
+
+  it('writes non-error logs to an injected stdout stream', async () => {
+    let captured = '';
+    const sink = {
+      write: (chunk: string | Uint8Array): boolean => {
+        captured += typeof chunk === 'string' ? chunk : chunk.toString();
+        return true;
+      },
+    } as NodeJS.WritableStream;
+    const logger = createLogger({ level: 'info', noColor: true, timestamps: false, stdout: sink });
+    const { stdout: realStdout } = await captureOutput(() => {
+      logger.info('routed');
+    });
+    assert.equal(realStdout, '', 'must use the injected stream, not real stdout');
+    assert.match(captured, /\[INFO\].*routed/);
+  });
+
   it('serializes object args as JSON', async () => {
     const logger = createLogger({ level: 'info', noColor: true, timestamps: false });
     const { stdout } = await captureOutput(() => {

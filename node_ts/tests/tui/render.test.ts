@@ -263,6 +263,30 @@ describe('TuiRenderer', () => {
     renderer.stop();
   });
 
+  it('redraws by moving the cursor up exactly the previous frame line count', () => {
+    // Regression: stimmt die cursor-up-Zahl nicht mit der Zeilenzahl des zuvor
+    // gezeichneten Frames überein, überschreibt das Redraw nicht alle alten
+    // Zeilen → duplizierte/zerschossene Darstellung.
+    const rows: TuiRuRow[] = [
+      { ru: 'a', status: 'pending' },
+      { ru: 'b', status: 'pending' },
+    ];
+    const expectedLines = buildFrame(rows, { noColor: true, noSpinner: true }).length;
+
+    const { stream, getOutput } = makeMockStream();
+    const renderer = new TuiRenderer(rows, { out: stream, noColor: true, noSpinner: true });
+    renderer.start();
+    const afterStart = getOutput().length;
+    renderer.update('a', 'done');
+    const delta = getOutput().slice(afterStart);
+
+    // eslint-disable-next-line no-control-regex
+    const m = /\[(\d+)A/.exec(delta);
+    assert.ok(m, 'expected a cursor-up escape on redraw');
+    assert.equal(Number(m![1]), expectedLines, 'cursor-up count must match previous frame lines');
+    renderer.stop();
+  });
+
   it('is idempotent on double start/stop', () => {
     const { stream } = makeMockStream();
     const renderer = new TuiRenderer([{ ru: 'a', status: 'pending' }], {

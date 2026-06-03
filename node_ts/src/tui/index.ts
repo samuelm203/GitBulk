@@ -88,7 +88,16 @@ export async function runTui(options: TuiOptions = {}): Promise<number> {
   // Spinner nur bei echtem TTY (sonst statisches Symbol, keine Live-Animation).
   const useSpinner = isTty;
 
-  const logger = createLogger({ level: 'warn', noColor: !useColor });
+  // WICHTIG: Im TUI-Modus MÜSSEN alle Logs nach stderr — sonst kollidieren sie
+  // mit dem stdout-basierten Live-Renderer (cursor-up/clear-line), verschieben
+  // dessen Frame und führen zu duplizierter/zerschossener Darstellung. stdout
+  // gehört exklusiv dem Renderer + dem Abschluss-Report.
+  const logger = createLogger({
+    level: 'warn',
+    noColor: !useColor,
+    stdout: process.stderr,
+    stderr: process.stderr,
+  });
   setDefaultLogger(logger);
 
   const writeErr = (msg: string): void => {

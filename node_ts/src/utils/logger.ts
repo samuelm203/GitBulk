@@ -46,6 +46,14 @@ export interface LoggerOptions {
   timestamps?: boolean;
   /** Wenn `true`, wird Farbe deaktiviert (z. B. für CI-Logs). Standard: `false`. */
   noColor?: boolean;
+  /**
+   * Ziel-Stream für nicht-Fehler-Logs (debug/info/warn). Standard: `process.stdout`.
+   * Injizierbar, damit z. B. der TUI-Modus ALLE Logs nach stderr leiten kann und
+   * stdout exklusiv dem Live-Renderer (+ Abschluss-Report) gehört.
+   */
+  stdout?: NodeJS.WritableStream;
+  /** Ziel-Stream für Fehler-Logs (error). Standard: `process.stderr`. */
+  stderr?: NodeJS.WritableStream;
 }
 
 /**
@@ -81,6 +89,8 @@ export function createLogger(options: LoggerOptions = {}): Logger {
   const level: LogLevel = options.level ?? 'info';
   const showTimestamps = options.timestamps ?? true;
   const useColor = !options.noColor;
+  const outStream = options.stdout ?? process.stdout;
+  const errStream = options.stderr ?? process.stderr;
 
   /**
    * Internes Log-Helper. Prüft das Level, formatiert die Meldung
@@ -126,7 +136,7 @@ export function createLogger(options: LoggerOptions = {}): Logger {
     parts.push(message);
 
     const line = parts.join(' ');
-    const stream = msgLevel === 'error' ? process.stderr : process.stdout;
+    const stream = msgLevel === 'error' ? errStream : outStream;
     stream.write(`${line}\n`);
 
     // Zusätzliche strukturierte Argumente (z. B. Error-Objekte)
