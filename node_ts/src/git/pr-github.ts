@@ -91,11 +91,22 @@ export class GitHubPrAdapter implements PullRequestAdapter {
     }
 
     const rawBody = await response.text();
-    if (response.status !== 201 && response.status !== 200) {
+
+    let success: CreatePrResult;
+    if (response.status === 201 || response.status === 200) {
+      success = this.parseSuccess(response.status, rawBody, input);
+    } else if (response.status === 422 && /already exists/i.test(rawBody)) {
+      // Re-Run-Fall: für diesen head→base existiert bereits ein offener PR.
+      // Statt zu scheitern, schlagen wir ihn nach und melden ihn als „updated".
+      const existing = await this.findOpenPr(input);
+      if (!existing) {
+        return this.parseFailure(response.status, rawBody);
+      }
+      this.logger.debug(`PR already exists for ${input.ru} (#${existing.id}) → treating as update`);
+      success = { ok: true, id: existing.id, url: existing.url, statusCode: 200, updated: true };
+    } else {
       return this.parseFailure(response.status, rawBody);
     }
-
-    const success = this.parseSuccess(response.status, rawBody, input);
 
     // Reviewer best-effort anfordern — ein Fehler hier macht den PR NICHT ungültig.
     if (success.ok && input.reviewers.length > 0 && typeof success.id === 'number') {
@@ -103,6 +114,34 @@ export class GitHubPrAdapter implements PullRequestAdapter {
     }
 
     return success;
+  }
+
+  /**
+   * Sucht den bereits offenen PR für `head=<owner>:<sourceBranch>` (best-effort).
+   * Wird nur aufgerufen, wenn die Create-Antwort „already exists" meldete.
+   *
+   * GET {apiBase}/repos/{owner}/{ru}/pulls?head={owner}:{branch}&state=open
+   *
+   * @returns `{ id, url }` des ersten Treffers oder `undefined`.
+   */
+  private async findOpenPr(input: CreatePrInput): Promise<{ id: number; url: string } | undefined> {
+    const head = `${encodeURIComponent(this.config.owner)}:${encodeURIComponent(input.sourceBranch)}`;
+    const url = `${this.apiBase}/repos/${encodeURIComponent(this.config.owner)}/${encodeURIComponent(input.ru)}/pulls?head=${head}&state=open`;
+    try {
+      const res = await fetch(url, { method: 'GET', headers: this.headers() });
+      if (res.status !== 200) return undefined;
+      const data = JSON.parse(await res.text()) as unknown;
+      if (Array.isArray(data) && data.length > 0) {
+        const pr = data[0] as { number?: number; html_url?: string };
+        if (typeof pr.number === 'number') {
+          const fallback = `https://github.com/${this.config.owner}/${input.ru}/pull/${pr.number}`;
+          return { id: pr.number, url: pr.html_url ?? fallback };
+        }
+      }
+    } catch {
+      // best-effort — bei Netzwerk-/Parse-Fehler kein Treffer.
+    }
+    return undefined;
   }
 
   /** Extrahiert PR-Nummer und URL aus der Erfolgs-Antwort. */

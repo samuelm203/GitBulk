@@ -442,6 +442,8 @@ A run flows through four phases:
    7. **Clean up** — restore the original branch and stash.
 4. **Pull request** (`git/phase4.ts` + `git/pr-adapter.ts`). Open a PR on the configured platform
    (Bitbucket/GitHub), best-effort reviewer assignment. Tokens are read from the environment.
+   If an open PR for the same source branch already exists (a re-run), GitBulk looks it up and
+   reports it as **`PR updated`** instead of `PR created` — no duplicate PR is attempted.
 
 A `RunSummary` is printed at the end with per-repository outcomes and totals.
 

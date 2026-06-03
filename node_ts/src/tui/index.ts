@@ -66,7 +66,7 @@ function progressToTuiStatus(status: RuProgressEvent['status']): TuiRuStatus {
  * Wird erst im finalen Report ausführlich; hier nur knapp für die Live-Zeile.
  */
 function detailForOutcome(event: RuProgressEvent): string | undefined {
-  if (event.outcome === 'pr-created') return 'PR created';
+  if (event.outcome === 'pr-created') return event.prUpdated ? 'PR updated' : 'PR created';
   if (event.outcome === 'pr-failed') return 'PR failed';
   if (event.outcome === 'fatal-error') return 'error';
   return undefined;

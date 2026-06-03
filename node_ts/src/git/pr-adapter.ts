@@ -55,6 +55,12 @@ export type CreatePrResult =
       url: string;
       /** HTTP-Status der API-Antwort (z. B. 201) */
       statusCode: number;
+      /**
+       * `true`, wenn KEIN neuer PR erstellt wurde, sondern ein bereits
+       * offener PR zum selben Source-Branch gefunden wurde (Re-Run-Fall).
+       * Steuert die Anzeige „PR updated" statt „PR created".
+       */
+      updated?: boolean;
     }
   | {
       ok: false;

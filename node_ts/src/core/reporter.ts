@@ -80,7 +80,10 @@ export function printRunSummary(summary: RunSummary, options: { noColor?: boolea
       detail.length > detailWidth ? `${detail.slice(0, detailWidth - 1)}…` : detail;
 
     const ruCol = r.ru.padEnd(ruWidth);
-    const statusLabel = `${style.symbol} ${style.label}`;
+    // „PR updated" statt „PR created", wenn ein bestehender PR gefunden wurde.
+    const label =
+      r.outcome === 'pr-created' && r.phase4.prUpdated ? 'PR updated' : style.label;
+    const statusLabel = `${style.symbol} ${label}`;
     const statusCol = padEndPlain(
       useColor ? style.color(statusLabel) : statusLabel,
       statusLabel,
@@ -102,8 +105,13 @@ export function printRunSummary(summary: RunSummary, options: { noColor?: boolea
   // ── Totals ─────────────────────────────────────────────────────
   out.write('\n');
   const t = summary.totals;
+  const updatedCount = summary.results.filter(
+    (r) => r.outcome === 'pr-created' && r.phase4.prUpdated,
+  ).length;
+  const createdLabel =
+    updatedCount > 0 ? `${t.prsCreated} created (${updatedCount} updated)` : `${t.prsCreated} created`;
   const parts = [
-    useColor ? colors.green(`${t.prsCreated} created`) : `${t.prsCreated} created`,
+    useColor ? colors.green(createdLabel) : createdLabel,
     useColor ? colors.gray(`${t.prsSkipped} skipped`) : `${t.prsSkipped} skipped`,
     useColor ? colors.red(`${t.prsFailed} failed`) : `${t.prsFailed} failed`,
     useColor ? colors.dim(`${t.notProcessed} not processed`) : `${t.notProcessed} not processed`,
@@ -121,7 +129,8 @@ export function printRunSummary(summary: RunSummary, options: { noColor?: boolea
     out.write('\n');
     out.write(useColor ? colors.bold('Created PRs:\n') : 'Created PRs:\n');
     for (const r of created) {
-      out.write(`  • ${r.ru}: ${r.phase4.prUrl}\n`);
+      const suffix = r.phase4.prUpdated ? ' (updated)' : '';
+      out.write(`  • ${r.ru}: ${r.phase4.prUrl}${suffix}\n`);
     }
   }
   out.write('\n');
@@ -132,7 +141,7 @@ export function printRunSummary(summary: RunSummary, options: { noColor?: boolea
  */
 function pickDetail(r: RuResult): string {
   if (r.outcome === 'pr-created' && r.phase4.prId !== undefined) {
-    return `PR #${r.phase4.prId}`;
+    return r.phase4.prUpdated ? `PR #${r.phase4.prId} (updated)` : `PR #${r.phase4.prId}`;
   }
   if (r.outcome === 'pr-failed') {
     return r.phase4.error ?? '(no error message)';

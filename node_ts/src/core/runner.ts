@@ -75,6 +75,8 @@ export interface RuProgressEvent {
   status: RuProgressStatus;
   /** Bei `done`/`failed`/`skipped`: das finale Outcome. Bei `running`: undefined. */
   outcome?: RuResult['outcome'];
+  /** `true`, wenn ein bereits offener PR aktualisiert (nicht neu erstellt) wurde. */
+  prUpdated?: boolean;
   /** Index der RU in der Gesamtliste (0-basiert) — für "3/10"-Anzeigen. */
   index: number;
   /** Gesamtanzahl RUs. */
@@ -152,13 +154,16 @@ async function processRu(
   const startedAt = Date.now();
 
   // Sicherer Event-Emitter: ein werfender Callback darf den Lauf nicht crashen.
-  const emit = (status: RuProgressStatus, outcome?: RuResult['outcome']): void => {
+  const emit = (
+    status: RuProgressStatus,
+    outcome?: RuResult['outcome'],
+    prUpdated?: boolean,
+  ): void => {
     if (!ctx.onProgress) return;
-    // outcome nur ins Event aufnehmen, wenn gesetzt (exactOptionalPropertyTypes).
-    const event: RuProgressEvent =
-      outcome === undefined
-        ? { ru, status, index: ctx.index, total: ctx.total }
-        : { ru, status, outcome, index: ctx.index, total: ctx.total };
+    // Felder nur ins Event aufnehmen, wenn gesetzt (exactOptionalPropertyTypes).
+    const event: RuProgressEvent = { ru, status, index: ctx.index, total: ctx.total };
+    if (outcome !== undefined) event.outcome = outcome;
+    if (prUpdated === true) event.prUpdated = true;
     try {
       ctx.onProgress(event);
     } catch {
@@ -204,7 +209,7 @@ async function processRu(
     durationMs: Date.now() - startedAt,
   };
 
-  emit(outcomeToProgressStatus(result.outcome), result.outcome);
+  emit(outcomeToProgressStatus(result.outcome), result.outcome, phase4.prUpdated);
   ruLogger.info(`Done in ${result.durationMs}ms — outcome: ${result.outcome}`);
   return result;
 }
