@@ -22,7 +22,7 @@ import { describeOperationParams } from '../../src/cli/operation-introspect.js';
 import { generateScript } from '../../src/cli/script-generator.js';
 import { generateYamlConfig, buildConfigObject } from '../../src/cli/config-generator.js';
 import { GitBulkConfigSchema } from '../../src/config/schema.js';
-import { validateOutputFileName, resolveOutputPath } from '../../src/cli/init.js';
+import { validateOutputFileName, resolveOutputPath, nextFreePath } from '../../src/cli/init.js';
 import type { Interface } from 'node:readline/promises';
 
 /** Minimaler readline-Mock: liefert die Antworten der Reihe nach. */
@@ -268,5 +268,47 @@ describe('resolveOutputPath', () => {
     assert.ok(target);
     assert.match(target, /custom[\\/]path\.yaml$/);
     assert.doesNotMatch(target, /[\\/]gitbulk[\\/]/);
+  });
+
+  it('auto-increments to the next free name when the target exists (no --force)', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'gitbulk-inc-'));
+    const existing = join(dir, 'gitbulk.config.yaml');
+    writeFileSync(existing, 'rus: []\n');
+
+    const target = await resolveOutputPath(mockRl([]), { outputPath: existing }, 'x.yaml');
+    assert.match(target, /[\\/]gitbulk\.config2\.yaml$/);
+    assert.equal(existsSync(target), false, 'returned path must not exist yet');
+  });
+
+  it('overwrites the existing target verbatim with --force', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'gitbulk-force-'));
+    const existing = join(dir, 'gitbulk.config.yaml');
+    writeFileSync(existing, 'rus: []\n');
+
+    const target = await resolveOutputPath(mockRl([]), { outputPath: existing, force: true }, 'x.yaml');
+    assert.equal(target, existing);
+  });
+});
+
+describe('nextFreePath', () => {
+  it('returns the path unchanged when it does not exist', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'gitbulk-nfp-'));
+    const p = join(dir, 'gitbulk.config.yaml');
+    assert.equal(nextFreePath(p), p);
+  });
+
+  it('inserts a counter before the extension and skips taken names', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'gitbulk-nfp2-'));
+    writeFileSync(join(dir, 'gitbulk.config.yaml'), '');
+    writeFileSync(join(dir, 'gitbulk.config2.yaml'), '');
+    const next = nextFreePath(join(dir, 'gitbulk.config.yaml'));
+    assert.match(next, /[\\/]gitbulk\.config3\.yaml$/);
+  });
+
+  it('handles script extensions (.mjs)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'gitbulk-nfp3-'));
+    writeFileSync(join(dir, 'gitbulk-change.mjs'), '');
+    const next = nextFreePath(join(dir, 'gitbulk-change.mjs'));
+    assert.match(next, /[\\/]gitbulk-change2\.mjs$/);
   });
 });

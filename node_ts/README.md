@@ -333,13 +333,16 @@ schema), and writes one of:
    **TypeScript (`.ts`)** (you pick the language up front).
 
 It then asks for the **file name** (with a sensible default) and writes the file into a fixed
-**`gitbulk/`** directory (created if missing); an existing file is only overwritten after you
-confirm (or with `--force`). Pass `--output <path>` to write to an explicit location instead.
+**`gitbulk/`** directory (created if missing). If the target already exists, GitBulk does **not**
+overwrite it — it picks the next free name instead (`gitbulk.config.yaml` → `gitbulk.config2.yaml`
+→ `gitbulk.config3.yaml` …), so repeated runs never clobber earlier configs. Pass `--force` to
+overwrite, or `--output <path>` to write to an explicit location.
 
 ```bash
 gitbulk init                       # interactive; writes into ./gitbulk/ (asks for the file name)
+gitbulk init                       # run again → ./gitbulk/gitbulk.config2.yaml (no overwrite)
 gitbulk init --output ./my.yaml    # write to an explicit path instead of ./gitbulk/
-gitbulk init --force               # overwrite an existing output file without asking
+gitbulk init --force               # overwrite the existing output file instead of incrementing
 ```
 
 > The API token is never written to the config — it is read at runtime from an environment
@@ -365,7 +368,7 @@ gitbulk [options]
 
 gitbulk init [options]          Interactively generate a config or a standalone .mjs/.ts script
   -o, --output <path>    Output file path
-  -f, --force            Overwrite the output file if it already exists
+  -f, --force            Overwrite the output file instead of auto-incrementing the name
 
 gitbulk list-operations [opts]  List all available operations and their parameters
       --json             Output as JSON (machine-readable)

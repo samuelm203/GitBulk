@@ -59,7 +59,7 @@ Options:
 
 init options:
   -o, --output <path>    Output file path
-  -f, --force            Overwrite the output file if it already exists
+  -f, --force            Overwrite the output file instead of auto-incrementing the name
 
 Exit codes: 0 ok | 1 a PR failed | 2 a fatal per-RU error | 3 setup error | 130 SIGINT
 `;

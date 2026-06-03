@@ -14,7 +14,7 @@
 import { createInterface, type Interface } from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
 import { existsSync, writeFileSync, mkdirSync } from 'node:fs';
-import { resolve, dirname } from 'node:path';
+import { resolve, dirname, basename, extname, join } from 'node:path';
 
 import * as colors from '../utils/colors.js';
 
@@ -69,16 +69,41 @@ export function validateOutputFileName(
 }
 
 /**
- * Ermittelt den Zielpfad und prüft Überschreiben.
+ * Liefert den nächsten freien Pfad, indem vor der Endung ein Zähler eingefügt
+ * wird, falls `target` bereits existiert: `gitbulk.config.yaml` →
+ * `gitbulk.config2.yaml` → `gitbulk.config3.yaml` …; `gitbulk-change.mjs` →
+ * `gitbulk-change2.mjs`. Existiert `target` nicht, wird er unverändert zurück-
+ * gegeben. Dateien ohne Endung hängen den Zähler hinten an.
+ */
+export function nextFreePath(target: string): string {
+  if (!existsSync(target)) return target;
+  const dir = dirname(target);
+  const ext = extname(target); // z. B. ".yaml" (leer, wenn keine Endung)
+  const stem = basename(target, ext);
+  let n = 2;
+  let candidate: string;
+  do {
+    candidate = join(dir, `${stem}${n}${ext}`);
+    n += 1;
+  } while (existsSync(candidate));
+  return candidate;
+}
+
+/**
+ * Ermittelt den Zielpfad.
  *
  * Ohne `--output` wird interaktiv ein Dateiname erfragt und die Datei im festen
- * `gitbulk/`-Ordner abgelegt. Mit `--output` gilt der angegebene Pfad unverändert.
+ * `gitbulk/`-Ordner abgelegt. Mit `--output` gilt der angegebene Pfad.
+ *
+ * Existiert die Zieldatei bereits, wird – sofern NICHT `--force` gesetzt ist –
+ * automatisch der nächste freie Name gewählt (Multi-YAML: `config2.yaml` …),
+ * statt zu überschreiben oder nachzufragen. `--force` überschreibt.
  */
 export async function resolveOutputPath(
   rl: Interface,
   opts: InitOptions,
   defaultName: string,
-): Promise<string | undefined> {
+): Promise<string> {
   let target: string;
   if (opts.outputPath !== undefined) {
     target = resolve(opts.outputPath);
@@ -89,18 +114,14 @@ export async function resolveOutputPath(
     target = resolve(GITBULK_DIR, filename);
   }
 
-  if (existsSync(target) && !opts.force) {
-    const overwrite = await promptUntilValid(
-      rl,
-      `${target} already exists. Overwrite? (Y/N):`,
-      validateYesNo,
-    );
-    if (!overwrite) {
-      output.write(colors.yellow('Aborted — no file written.\n'));
-      return undefined;
-    }
+  if (opts.force || !existsSync(target)) {
+    return target;
   }
-  return target;
+
+  // Existiert und kein --force: nächsten freien Namen wählen (kein Überschreiben).
+  const free = nextFreePath(target);
+  output.write(colors.yellow(`${target} already exists — writing ${free} instead.\n`));
+  return free;
 }
 
 /**
@@ -169,7 +190,6 @@ async function exportScript(
 
   const defaultName = language === 'ts' ? 'gitbulk-change.ts' : 'gitbulk-change.mjs';
   const target = await resolveOutputPath(rl, opts, defaultName);
-  if (!target) return 3;
 
   mkdirSync(dirname(target), { recursive: true });
   writeFileSync(target, code, { mode: 0o755 });
@@ -223,7 +243,6 @@ async function exportConfig(
   });
 
   const target = await resolveOutputPath(rl, opts, 'gitbulk.config.yaml');
-  if (!target) return 3;
 
   mkdirSync(dirname(target), { recursive: true });
   writeFileSync(target, yaml);
