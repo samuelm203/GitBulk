@@ -300,8 +300,8 @@ operations:
 ```
 
 If any operation reports an error, GitBulk treats the change like a failed script (commit message
-`ERROR WHILE CODE CHANGE`, PR only created when `createPrOnError: true`). If nothing changed, no PR
-is opened and the feature branch is deleted.
+`ERROR WHILE CODE CHANGE: <commitMessage>`, PR only created when `createPrOnError: true`). If
+nothing changed, no PR is opened and the feature branch is deleted.
 
 ### Available operations
 
@@ -332,10 +332,14 @@ schema), and writes one of:
 2. a standalone **code-change script** you can edit freely — in **JavaScript (`.mjs`)** or
    **TypeScript (`.ts`)** (you pick the language up front).
 
+It then asks for the **file name** (with a sensible default) and writes the file into a fixed
+**`gitbulk/`** directory (created if missing); an existing file is only overwritten after you
+confirm (or with `--force`). Pass `--output <path>` to write to an explicit location instead.
+
 ```bash
-gitbulk init                       # interactive; writes ./gitbulk.config.yaml, ./gitbulk-change.mjs or .ts
-gitbulk init --output my.yaml      # choose the output path
-gitbulk init --force               # overwrite the output file without asking
+gitbulk init                       # interactive; writes into ./gitbulk/ (asks for the file name)
+gitbulk init --output ./my.yaml    # write to an explicit path instead of ./gitbulk/
+gitbulk init --force               # overwrite an existing output file without asking
 ```
 
 > The API token is never written to the config — it is read at runtime from an environment
@@ -428,7 +432,8 @@ A run flows through four phases:
    3. **Create the feature branch** `<ticket>-<branch>`.
    4. **Run the code change** — your `script` *or* the configured `operations`.
    5. **Check the diff.** No diff → delete the branch, no PR. Diff → **commit** (or
-      `ERROR WHILE CODE CHANGE` if the change failed).
+      `ERROR WHILE CODE CHANGE: <commitMessage>` if the change failed — the failure is flagged
+      while the configured message is kept as context).
    6. **Push** the feature branch with `--force-with-lease`, retried with exponential backoff;
       permanent errors (auth, protected branch, …) are not retried.
    7. **Clean up** — restore the original branch and stash.

@@ -22,6 +22,17 @@ import { describeOperationParams } from '../../src/cli/operation-introspect.js';
 import { generateScript } from '../../src/cli/script-generator.js';
 import { generateYamlConfig, buildConfigObject } from '../../src/cli/config-generator.js';
 import { GitBulkConfigSchema } from '../../src/config/schema.js';
+import { validateOutputFileName, resolveOutputPath } from '../../src/cli/init.js';
+import type { Interface } from 'node:readline/promises';
+
+/** Minimaler readline-Mock: liefert die Antworten der Reihe nach. */
+function mockRl(answers: string[]): Interface {
+  let i = 0;
+  return {
+    question: async () => answers[i++] ?? '',
+    close: () => undefined,
+  } as unknown as Interface;
+}
 
 // ── operation-introspect ────────────────────────────────────────────
 
@@ -198,5 +209,53 @@ describe('script-generator', () => {
     assert.equal(r.status, 0, `ts script failed: ${r.stderr}`);
     assert.equal(readFileSync(join(ws, 'created.ts'), 'utf8'), 'export const x = 1;');
     assert.equal(readFileSync(join(ws, 'version.txt'), 'utf8'), 'version=2');
+  });
+});
+
+// ── validateOutputFileName (init.ts) ───────────────────────────────
+
+describe('validateOutputFileName', () => {
+  it('uses the default on blank input', () => {
+    const r = validateOutputFileName('   ', 'gitbulk.config.yaml');
+    assert.equal(r.ok, true);
+    if (r.ok) assert.equal(r.value, 'gitbulk.config.yaml');
+  });
+
+  it('accepts a plain file name', () => {
+    const r = validateOutputFileName('my-change.mjs', 'def');
+    assert.equal(r.ok, true);
+    if (r.ok) assert.equal(r.value, 'my-change.mjs');
+  });
+
+  it('rejects path separators and traversal', () => {
+    for (const bad of ['../escape.yaml', 'sub/dir.yaml', 'a\\b.yaml', '.', '..']) {
+      const r = validateOutputFileName(bad, 'def');
+      assert.equal(r.ok, false, `expected "${bad}" to be rejected`);
+    }
+  });
+});
+
+describe('resolveOutputPath', () => {
+  it('places generated files under gitbulk/ by default (blank → default name)', async () => {
+    const target = await resolveOutputPath(mockRl(['']), { force: true }, 'gitbulk.config.yaml');
+    assert.ok(target);
+    assert.match(target, /[\\/]gitbulk[\\/]gitbulk\.config\.yaml$/);
+  });
+
+  it('uses a custom file name under gitbulk/', async () => {
+    const target = await resolveOutputPath(mockRl(['my-change.mjs']), { force: true }, 'gitbulk-change.mjs');
+    assert.ok(target);
+    assert.match(target, /[\\/]gitbulk[\\/]my-change\.mjs$/);
+  });
+
+  it('honors --output verbatim (no gitbulk/ prefix)', async () => {
+    const target = await resolveOutputPath(
+      mockRl([]),
+      { outputPath: 'custom/path.yaml', force: true },
+      'gitbulk.config.yaml',
+    );
+    assert.ok(target);
+    assert.match(target, /custom[\\/]path\.yaml$/);
+    assert.doesNotMatch(target, /[\\/]gitbulk[\\/]/);
   });
 });
