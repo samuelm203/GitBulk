@@ -20,6 +20,7 @@ import {
   resetHardToOrigin,
   cleanWorkingTree,
   buildFeatureBranchName,
+  buildCommitMessage,
   createFeatureBranch,
   executeCodeChange,
   stageAll,
@@ -134,6 +135,24 @@ describe('Source branch update (fetch/checkout/reset/clean)', () => {
 describe('buildFeatureBranchName', () => {
   it('joins ticket and branch with dash', () => {
     assert.equal(buildFeatureBranchName('AKB-1', 'feature/x'), 'AKB-1-feature/x');
+  });
+});
+
+describe('buildCommitMessage', () => {
+  it('prepends the ticket separated by a space', () => {
+    assert.equal(buildCommitMessage('AKB-1234', 'add dependency'), 'AKB-1234 add dependency');
+  });
+
+  it('does not duplicate an already-prefixed ticket', () => {
+    assert.equal(buildCommitMessage('AKB-1234', 'AKB-1234 add dep'), 'AKB-1234 add dep');
+  });
+
+  it('falls back to the message when ticket is empty', () => {
+    assert.equal(buildCommitMessage('', 'just a message'), 'just a message');
+  });
+
+  it('trims surrounding whitespace', () => {
+    assert.equal(buildCommitMessage('  AKB-1  ', '  msg  '), 'AKB-1 msg');
   });
 });
 

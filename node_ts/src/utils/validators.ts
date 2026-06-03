@@ -120,8 +120,11 @@ export function validateBranchName(input: string): ValidationResult<string> {
 /**
  * Validiert einen Ticket-Identifier (z. B. `AKB-1234`).
  *
- * Erlaubt: Buchstaben, Zahlen und Bindestriche.
- * Wird im Branch-Namen vorangestellt: `[ticket]-[branchName]`.
+ * Erlaubt: alphanumerische Segmente, getrennt durch EINZELNE Bindestriche
+ * (`ABC-123`, `ABC-123-DEF`, `1234`). Bewusst NICHT erlaubt: führende/anhängende
+ * Bindestriche (`-ABC`, `ABC-`) und doppelte Bindestriche (`A--B`) — sie würden
+ * im Branch-Namen (`<ticket>-<branch>`) und in der Commit-Message zu hässlichen
+ * Doppel-Trennern führen.
  *
  * @param input - Roh-Eingabe
  */
@@ -131,7 +134,7 @@ export function validateTicket(input: string): ValidationResult<string> {
   if (trimmed.length === 0) {
     return { ok: false, error: 'Error: Ticket is missing' };
   }
-  if (!/^[A-Z0-9][A-Z0-9-]*$/.test(trimmed)) {
+  if (!/^[A-Z0-9]+(?:-[A-Z0-9]+)*$/.test(trimmed)) {
     return { ok: false, error: 'Error: Invalid ticket format' };
   }
 

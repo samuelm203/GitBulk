@@ -207,6 +207,12 @@ export async function confirmConfig(
       ? `bitbucket (workspace: ${config.bitbucket?.workspace ?? '?'}, target: ${config.bitbucket?.targetBranch ?? '?'})`
       : `github (owner: ${config.github?.owner ?? '?'}, target: ${config.github?.targetBranch ?? '?'})`;
 
+  // Reviewer-Liste der gewählten Plattform (für die dynamische Zeile unten).
+  const reviewers =
+    config.prPlatform === 'bitbucket'
+      ? config.bitbucket?.reviewers ?? []
+      : config.github?.reviewers ?? [];
+
   output.write('\n');
   output.write(colors.bold('━━━ Configuration Summary ━━━\n'));
   output.write(`  ${colors.gray('RUs:')}             ${config.rus.join(', ')}\n`);
@@ -217,6 +223,10 @@ export async function confirmConfig(
   output.write(`  ${colors.gray('PR summary:')}      ${config.prSummary}\n`);
   output.write(`  ${colors.gray('PR on error:')}     ${config.createPrOnError ? 'Yes' : 'No'}\n`);
   output.write(`  ${colors.gray('PR platform:')}     ${platform}\n`);
+  // Reviewers NUR anzeigen, wenn welche gesetzt sind (sonst Zeile komplett weglassen).
+  if (reviewers.length > 0) {
+    output.write(`  ${colors.gray('Reviewers:')}       ${reviewers.join(', ')}\n`);
+  }
   output.write(colors.bold('━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n'));
 
   return promptUntilValid(rl, 'Confirm configuration? (Y/N):', validateYesNo);

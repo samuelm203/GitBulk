@@ -216,7 +216,8 @@ describe('Phase 3 - 3.5b Code-Change fails with diff', () => {
       );
       assert.match(log.stdout, /ERROR WHILE CODE CHANGE/);
       assert.match(log.stdout, /feat: test/);
-      assert.equal(log.stdout.trim(), 'ERROR WHILE CODE CHANGE: feat: test');
+      // Commit message: failure flag + ticket prefix + configured message.
+      assert.equal(log.stdout.trim(), 'ERROR WHILE CODE CHANGE: AKB-1234 feat: test');
     } finally {
       cleanup(ws);
     }

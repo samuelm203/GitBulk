@@ -241,7 +241,7 @@ bitbucket:
 | `branch`           | yes      | —           | Feature branch name (sanitized automatically).                     |
 | `script`           | cond.    | —           | Path to the code-change script. Set this **or** `operations`.      |
 | `operations`       | cond.    | —           | List of declarative operations. Set this **or** `script`.          |
-| `commitMessage`    | yes      | —           | Commit message used on a successful change.                        |
+| `commitMessage`    | yes      | —           | Commit message. The ticket is prepended automatically: `<ticket> <commitMessage>`. |
 | `prSummary`        | yes      | —           | Title/description for the pull request.                            |
 | `createPrOnError`  | yes      | —           | Create a PR even if the code change fails.                         |
 | `workspaceDir`     | no       | CWD         | Root directory containing the RU repositories.                     |
@@ -431,9 +431,9 @@ A run flows through four phases:
       (`fetch` → `checkout <sourceBranch>` → `reset --hard origin/<sourceBranch>` → `clean -fd`).
    3. **Create the feature branch** `<ticket>-<branch>`.
    4. **Run the code change** — your `script` *or* the configured `operations`.
-   5. **Check the diff.** No diff → delete the branch, no PR. Diff → **commit** (or
-      `ERROR WHILE CODE CHANGE: <commitMessage>` if the change failed — the failure is flagged
-      while the configured message is kept as context).
+   5. **Check the diff.** No diff → delete the branch, no PR. Diff → **commit** as
+      `<ticket> <commitMessage>` (or `ERROR WHILE CODE CHANGE: <ticket> <commitMessage>` if the
+      change failed — the failure is flagged while the configured message is kept as context).
    6. **Push** the feature branch with `--force-with-lease`, retried with exponential backoff;
       permanent errors (auth, protected branch, …) are not retried.
    7. **Clean up** — restore the original branch and stash.

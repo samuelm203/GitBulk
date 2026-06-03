@@ -100,6 +100,17 @@ describe('config-generator', () => {
     const result = GitBulkConfigSchema.safeParse(parsed);
     assert.equal(result.success, true, JSON.stringify(result, null, 2));
   });
+
+  it('double-quotes free-text fields (commitMessage, prSummary)', () => {
+    const yaml = generateYamlConfig(baseInput);
+    // Auto-Quotes: Freitext-Felder erscheinen explizit doppelt-gequotet.
+    assert.match(yaml, /commitMessage: "feat: add dep"/);
+    assert.match(yaml, /prSummary: "Add dependency"/);
+    // Trotzdem weiterhin parse- und schemavalide.
+    const parsed = parseYaml(yaml) as { commitMessage: string; prSummary: string };
+    assert.equal(parsed.commitMessage, 'feat: add dep');
+    assert.equal(parsed.prSummary, 'Add dependency');
+  });
 });
 
 // ── script-generator (mit echter Ausführung) ────────────────────────
