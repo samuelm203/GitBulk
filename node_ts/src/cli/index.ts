@@ -27,9 +27,17 @@ import { parseArgs } from 'node:util';
 import * as colors from '../utils/colors.js';
 
 import { loadConfig, ConfigError } from '../config/loader.js';
-import { createLogger, setDefaultLogger, type LogLevel, LOG_LEVELS } from '../utils/logger.js';
+import {
+  createLogger,
+  setDefaultLogger,
+  LogCapture,
+  type LogLevel,
+  LOG_LEVELS,
+} from '../utils/logger.js';
 import { detectGit } from '../git/executor.js';
 import { createPrAdapter, PrAdapterError } from '../git/pr-adapter.js';
+import { ensurePrToken } from './token-prompt.js';
+import { finishDeepLog } from './deep-log.js';
 import { runBulk } from '../core/runner.js';
 import { printRunSummary } from '../core/reporter.js';
 import { runTui } from '../tui/index.js';
@@ -51,6 +59,7 @@ Options:
   -m, --mode <mode>      Config mode: "strict" or "hybrid" (default: hybrid)
       --dry-run          Do not perform any write operations (push, PR API)
       --tui              Interactive terminal UI with live per-RU progress
+      --deep-log         Record a granular step-by-step log; offer to save/print it at the end
       --only <rus>       Only process these RUs (comma-separated subset)
   -l, --log-level <lvl>  Log level: ${LOG_LEVELS.join(' | ')} (default: info)
       --no-color         Disable colored output
@@ -97,6 +106,7 @@ function parseCliArgs() {
       mode: { type: 'string', short: 'm', default: 'hybrid' },
       'dry-run': { type: 'boolean', default: false },
       tui: { type: 'boolean', default: false },
+      'deep-log': { type: 'boolean', default: false },
       only: { type: 'string' },
       'log-level': { type: 'string', short: 'l', default: 'info' },
       'no-color': { type: 'boolean', default: false },
@@ -217,6 +227,7 @@ async function main(): Promise<number> {
     mode: values.mode ?? 'hybrid',
     dryRun: values['dry-run'] ?? false,
     tui: values.tui ?? false,
+    deepLog: values['deep-log'] ?? false,
     only: values.only,
     logLevel: values['log-level'] ?? 'info',
     color: useColor,
@@ -231,7 +242,13 @@ async function main(): Promise<number> {
     return 3;
   }
 
-  const logger = createLogger({ level: logLevel, noColor: !useColor });
+  // Deep-Log: optionaler In-Memory-Puffer, der JEDE Meldung erfasst.
+  const deepCapture = opts.deepLog ? new LogCapture() : undefined;
+  const logger = createLogger({
+    level: logLevel,
+    noColor: !useColor,
+    ...(deepCapture ? { capture: deepCapture } : {}),
+  });
   setDefaultLogger(logger);
 
   // ── Mode validieren ────────────────────────────────────────────
@@ -266,6 +283,7 @@ async function main(): Promise<number> {
     };
     if (opts.config) tuiOpts.configPath = opts.config;
     if (opts.only !== undefined) tuiOpts.only = opts.only;
+    if (opts.deepLog) tuiOpts.deepLog = true;
     return runTui(tuiOpts);
   }
 
@@ -307,6 +325,14 @@ async function main(): Promise<number> {
     return 3;
   }
 
+  // ── Auth-Guard: Token sicherstellen (Prompt im TTY, sonst Fehler) ──
+  const interactive = process.stdin.isTTY === true && process.stdout.isTTY === true;
+  const tokenCheck = await ensurePrToken(config.prPlatform, { interactive });
+  if (!tokenCheck.ok) {
+    printError(tokenCheck.error, useColor);
+    return 3;
+  }
+
   // ── PR-Adapter bauen ───────────────────────────────────────────
   let adapter: Awaited<ReturnType<typeof createPrAdapter>>;
   try {
@@ -335,6 +361,11 @@ async function main(): Promise<number> {
 
   // ── Summary drucken ────────────────────────────────────────────
   printRunSummary(summary, { noColor: !useColor });
+
+  // ── Deep-Log abschließen (Datei/Print) ─────────────────────────
+  if (deepCapture) {
+    await finishDeepLog(deepCapture, { interactive });
+  }
 
   return exitCodeFromSummary(summary);
 }

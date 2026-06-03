@@ -21,9 +21,11 @@ import { createPrAdapter, PrAdapterError } from '../git/pr-adapter.js';
 import { runBulk, type RuProgressEvent } from '../core/runner.js';
 import { printRunSummary } from '../core/reporter.js';
 import { detectGit } from '../git/executor.js';
-import { createLogger, setDefaultLogger } from '../utils/logger.js';
+import { createLogger, setDefaultLogger, LogCapture } from '../utils/logger.js';
 import { TuiRenderer, type TuiRuRow, type TuiRuStatus } from './render.js';
 import { filterRus } from '../cli/filter-rus.js';
+import { ensurePrToken } from '../cli/token-prompt.js';
+import { finishDeepLog } from '../cli/deep-log.js';
 
 /**
  * Optionen für den TUI-Lauf.
@@ -39,6 +41,8 @@ export interface TuiOptions {
   noColor?: boolean;
   /** RU-Filter (komma-separierte Teilmenge), entspricht `--only`. */
   only?: string;
+  /** Granulares Deep-Log aktivieren (entspricht `--deep-log`). */
+  deepLog?: boolean;
   /** AbortSignal (z. B. Ctrl+C). */
   signal?: AbortSignal;
 }
@@ -92,11 +96,13 @@ export async function runTui(options: TuiOptions = {}): Promise<number> {
   // mit dem stdout-basierten Live-Renderer (cursor-up/clear-line), verschieben
   // dessen Frame und führen zu duplizierter/zerschossener Darstellung. stdout
   // gehört exklusiv dem Renderer + dem Abschluss-Report.
+  const deepCapture = options.deepLog ? new LogCapture() : undefined;
   const logger = createLogger({
     level: 'warn',
     noColor: !useColor,
     stdout: process.stderr,
     stderr: process.stderr,
+    ...(deepCapture ? { capture: deepCapture } : {}),
   });
   setDefaultLogger(logger);
 
@@ -139,6 +145,15 @@ export async function runTui(options: TuiOptions = {}): Promise<number> {
     config = filterRus(config, options.only);
   } catch (err) {
     writeErr(`Error: ${(err as Error).message}`);
+    return 3;
+  }
+
+  // ── Auth-Guard: Token sicherstellen (Prompt im TTY, sonst Fehler) ──
+  // Passiert VOR dem Renderer-Start, damit der Prompt sauber auf stdout läuft.
+  const tokenInteractive = process.stdin.isTTY === true && isTty;
+  const tokenCheck = await ensurePrToken(config.prPlatform, { interactive: tokenInteractive });
+  if (!tokenCheck.ok) {
+    writeErr(`Error: ${tokenCheck.error}`);
     return 3;
   }
 
@@ -189,6 +204,11 @@ export async function runTui(options: TuiOptions = {}): Promise<number> {
 
   // ── Abschluss-Report (ausführlich, unter der Live-Liste) ───────
   printRunSummary(summary, { noColor: !useColor });
+
+  // ── Deep-Log abschließen (Datei/Print) ─────────────────────────
+  if (deepCapture) {
+    await finishDeepLog(deepCapture, { interactive: tokenInteractive });
+  }
 
   if (summary.totals.fatalErrors > 0) return 2;
   if (summary.totals.prsFailed > 0) return 1;
