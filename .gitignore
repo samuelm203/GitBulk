@@ -40,6 +40,8 @@ gitbulk.local.config.*
 
 # Generierte `gitbulk init`-Artefakte (sollen nicht eingecheckt werden)
 gitbulk-change.*
+# Standard-Zielordner von `gitbulk init` (generierte Configs/Skripte)
+gitbulk/
 
 .idea/
 workspace.xml

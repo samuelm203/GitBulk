@@ -13,8 +13,8 @@
 
 import { createInterface, type Interface } from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
-import { existsSync, writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { existsSync, writeFileSync, mkdirSync } from 'node:fs';
+import { resolve, dirname } from 'node:path';
 
 import * as colors from '../utils/colors.js';
 
@@ -35,8 +35,15 @@ import {
 } from './script-generator.js';
 import { generateYamlConfig } from './config-generator.js';
 
+/**
+ * Standard-Zielordner für generierte Configs/Skripte. Hält alle GitBulk-
+ * Artefakte an einem Ort (per `--output` überschreibbar) und ist via `.gitignore`
+ * (`gitbulk/`) standardmäßig ausgenommen.
+ */
+const GITBULK_DIR = 'gitbulk';
+
 export interface InitOptions {
-  /** Optionaler Ausgabepfad (sonst Default je nach Modus oder Prompt). */
+  /** Optionaler Ausgabepfad (überschreibt den gitbulk/-Default + Dateinamen-Prompt). */
   outputPath?: string;
   /** Vorhandene Datei ohne Rückfrage überschreiben. */
   force?: boolean;
@@ -44,13 +51,44 @@ export interface InitOptions {
   noColor?: boolean;
 }
 
-/** Ermittelt den Zielpfad und prüft Überschreiben. */
-async function resolveOutputPath(
+/**
+ * Validiert einen reinen Dateinamen (kein Pfad-Separator, kein `.`/`..`),
+ * damit `init` nicht aus dem gitbulk/-Verzeichnis ausbrechen kann. Leere
+ * Eingabe → Default.
+ */
+export function validateOutputFileName(
+  raw: string,
+  defaultName: string,
+): { ok: true; value: string } | { ok: false; error: string } {
+  const t = raw.trim();
+  const name = t.length === 0 ? defaultName : t;
+  if (/[\\/]/.test(name) || name === '.' || name === '..') {
+    return { ok: false, error: 'Enter a plain file name (no path separators, no "." / "..").' };
+  }
+  return { ok: true, value: name };
+}
+
+/**
+ * Ermittelt den Zielpfad und prüft Überschreiben.
+ *
+ * Ohne `--output` wird interaktiv ein Dateiname erfragt und die Datei im festen
+ * `gitbulk/`-Ordner abgelegt. Mit `--output` gilt der angegebene Pfad unverändert.
+ */
+export async function resolveOutputPath(
   rl: Interface,
   opts: InitOptions,
   defaultName: string,
 ): Promise<string | undefined> {
-  const target = resolve(opts.outputPath ?? defaultName);
+  let target: string;
+  if (opts.outputPath !== undefined) {
+    target = resolve(opts.outputPath);
+  } else {
+    const filename = await promptUntilValid(rl, `File name [default: ${defaultName}]:`, (raw) =>
+      validateOutputFileName(raw, defaultName),
+    );
+    target = resolve(GITBULK_DIR, filename);
+  }
+
   if (existsSync(target) && !opts.force) {
     const overwrite = await promptUntilValid(
       rl,
@@ -133,6 +171,7 @@ async function exportScript(
   const target = await resolveOutputPath(rl, opts, defaultName);
   if (!target) return 3;
 
+  mkdirSync(dirname(target), { recursive: true });
   writeFileSync(target, code, { mode: 0o755 });
   output.write(colors.green(`\n✓ Wrote standalone script: ${target}\n`));
   output.write(colors.gray(`  Use it via the "script" field in your config, then edit freely.\n`));
@@ -186,6 +225,7 @@ async function exportConfig(
   const target = await resolveOutputPath(rl, opts, 'gitbulk.config.yaml');
   if (!target) return 3;
 
+  mkdirSync(dirname(target), { recursive: true });
   writeFileSync(target, yaml);
   output.write(colors.green(`\n✓ Wrote config: ${target}\n`));
   output.write(colors.gray(`  Run it via: gitbulk --config ${target}\n`));
