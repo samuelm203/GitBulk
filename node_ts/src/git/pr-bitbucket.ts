@@ -128,7 +128,64 @@ export class BitbucketPrAdapter implements PullRequestAdapter {
       return this.parseSuccess(response.status, rawBody, input);
     }
 
+    // Re-Run-Fall: Bitbucket lehnt einen zweiten PR für denselben
+    // Source→Target ab (Cloud: 400 „...already exists..."; Server: 409 „Only
+    // one pull request may be open..."). Statt zu scheitern, schlagen wir den
+    // offenen PR nach und melden ihn als „updated".
+    if (
+      (response.status === 400 || response.status === 409) &&
+      /already exists|only one pull request/i.test(rawBody)
+    ) {
+      const existing = await this.findOpenPr(input);
+      if (existing) {
+        this.logger.debug(`PR already exists for ${input.ru} (#${existing.id}) → treating as update`);
+        return { ok: true, id: existing.id, url: existing.url, statusCode: 200, updated: true };
+      }
+    }
+
     return this.parseFailure(response.status, rawBody);
+  }
+
+  /**
+   * Sucht den bereits offenen PR zum Source-Branch (best-effort).
+   * Wird nur aufgerufen, wenn die Create-Antwort „already exists" meldete.
+   *
+   * Cloud:  GET /repositories/{ws}/{repo}/pullrequests?q=source.branch.name="<b>"&state=OPEN
+   * Server: GET /rest/api/1.0/projects/{key}/repos/{repo}/pull-requests
+   *           ?state=OPEN&at=refs/heads/<b>&direction=OUTGOING
+   */
+  private async findOpenPr(input: CreatePrInput): Promise<{ id: number; url: string } | undefined> {
+    const url = this.cloud
+      ? `${this.apiBase}/repositories/${encodeURIComponent(this.config.workspace)}/${encodeURIComponent(input.ru)}/pullrequests?q=${encodeURIComponent(`source.branch.name="${input.sourceBranch}"`)}&state=OPEN`
+      : `${this.apiBase}/rest/api/1.0/projects/${encodeURIComponent(this.config.workspace)}/repos/${encodeURIComponent(input.ru)}/pull-requests?state=OPEN&at=${encodeURIComponent(`refs/heads/${input.sourceBranch}`)}&direction=OUTGOING`;
+    try {
+      const res = await fetch(url, {
+        method: 'GET',
+        headers: { Authorization: this.authHeader, Accept: 'application/json' },
+      });
+      if (res.status !== 200) return undefined;
+      const data = JSON.parse(await res.text()) as { values?: Array<Record<string, unknown>> };
+      const first = data.values?.[0];
+      if (!first || (typeof first.id !== 'number' && typeof first.id !== 'string')) {
+        return undefined;
+      }
+      const id = typeof first.id === 'number' ? first.id : Number(first.id);
+      if (!Number.isFinite(id)) return undefined;
+      let prUrl: string;
+      if (this.cloud) {
+        const links = first.links as { html?: { href?: string } } | undefined;
+        prUrl =
+          links?.html?.href ??
+          `https://bitbucket.org/${this.config.workspace}/${input.ru}/pull-requests/${id}`;
+      } else {
+        const links = first.links as { self?: Array<{ href?: string }> } | undefined;
+        prUrl = links?.self?.[0]?.href ?? `${this.apiBase}`;
+      }
+      return { id, url: prUrl };
+    } catch {
+      // best-effort — bei Netzwerk-/Parse-Fehler kein Treffer.
+      return undefined;
+    }
   }
 
   /**

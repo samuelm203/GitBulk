@@ -85,6 +85,46 @@ describe('printRunSummary', () => {
     assert.match(out, /https:\/\/x\.com\/42/);
   });
 
+  it('labels an updated PR as "PR updated" with (updated) markers', () => {
+    const out = captureStdout(() =>
+      printRunSummary(
+        summary({
+          results: [
+            {
+              ru: 'repo-a',
+              phase3: {
+                ru: 'repo-a',
+                processed: true,
+                prStatus: 'create_PR',
+                featureBranch: 'AKB-1-f',
+                notes: [],
+                cleanupOk: true,
+              },
+              phase4: {
+                ru: 'repo-a',
+                apiCalled: true,
+                success: true,
+                prId: 42,
+                prUrl: 'https://x.com/42',
+                prUpdated: true,
+                notes: [],
+              },
+              outcome: 'pr-created',
+              durationMs: 234,
+            },
+          ],
+          totals: { rus: 1, prsCreated: 1, prsSkipped: 0, prsFailed: 0, notProcessed: 0, fatalErrors: 0 },
+        }),
+        { noColor: true },
+      ),
+    );
+    assert.match(out, /PR updated/);
+    assert.doesNotMatch(out, /PR created/);
+    assert.match(out, /PR #42 \(updated\)/);
+    assert.match(out, /1 created \(1 updated\)/);
+    assert.match(out, /https:\/\/x\.com\/42 \(updated\)/);
+  });
+
   it('shows error detail for pr-failed', () => {
     const out = captureStdout(() =>
       printRunSummary(

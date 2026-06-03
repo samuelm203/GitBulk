@@ -74,10 +74,10 @@ describe('GitHubPrAdapter', () => {
     assert.match(String(headers['accept']), /vnd\.github/);
   });
 
-  it('returns a failure result with the API message on 422', async () => {
+  it('returns a failure result with the API message on a non-"already exists" 422', async () => {
     mock.enqueue({
       status: 422,
-      body: { message: 'Validation Failed', errors: [{ message: 'A pull request already exists' }] },
+      body: { message: 'Validation Failed', errors: [{ message: 'base is invalid' }] },
     });
 
     const result = await makeAdapter().createPullRequest(baseInput);
@@ -86,9 +86,50 @@ describe('GitHubPrAdapter', () => {
     if (!result.ok) {
       assert.equal(result.statusCode, 422);
       assert.match(result.error, /Validation Failed/);
-      assert.match(result.error, /already exists/);
+      assert.match(result.error, /base is invalid/);
     }
+    // Keine "already exists"-Meldung → KEIN Lookup-Call.
     assert.equal(mock.requests.length, 1);
+  });
+
+  it('treats a 422 "already exists" as an update: looks up the open PR', async () => {
+    // 1) POST → 422 "already exists"
+    mock.enqueue({
+      status: 422,
+      body: { message: 'Validation Failed', errors: [{ message: 'A pull request already exists for my-org:feature/x.' }] },
+    });
+    // 2) GET pulls?head=... → bestehender offener PR
+    mock.enqueue({
+      status: 200,
+      body: [{ number: 12, html_url: 'https://github.com/my-org/repo-a/pull/12' }],
+    });
+
+    const result = await makeAdapter().createPullRequest(baseInput);
+
+    assert.equal(result.ok, true);
+    if (result.ok) {
+      assert.equal(result.id, 12);
+      assert.equal(result.url, 'https://github.com/my-org/repo-a/pull/12');
+      assert.equal(result.updated, true);
+    }
+    assert.equal(mock.requests.length, 2);
+    const getReq = mock.requests[1]!;
+    assert.equal(getReq.method, 'GET');
+    assert.match(getReq.url, /^\/repos\/my-org\/repo-a\/pulls\?head=my-org:feature%2Fx&state=open$/);
+  });
+
+  it('keeps the failure when "already exists" but the lookup finds nothing', async () => {
+    mock.enqueue({
+      status: 422,
+      body: { message: 'Validation Failed', errors: [{ message: 'A pull request already exists' }] },
+    });
+    mock.enqueue({ status: 200, body: [] }); // GET → leer
+
+    const result = await makeAdapter().createPullRequest(baseInput);
+
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.equal(result.statusCode, 422);
+    assert.equal(mock.requests.length, 2);
   });
 
   it('requests reviewers in a second call (best-effort) without failing the PR', async () => {

@@ -213,6 +213,59 @@ describe('BitbucketPrAdapter - Error handling', () => {
     }
   });
 
+  it('Cloud: treats "already exists" (400) as an update and looks up the open PR', async () => {
+    // 1) POST → 400 already exists
+    mock.enqueue({ status: 400, body: { error: { message: 'Pull request already exists.' } } });
+    // 2) GET pullrequests?q=... → bestehender PR
+    mock.enqueue({
+      status: 200,
+      body: { values: [{ id: 77, links: { html: { href: 'https://bb.org/pr/77' } } }] },
+    });
+    const adapter = new BitbucketPrAdapter(
+      { workspace: 'my-ws', apiVariant: 'cloud', apiBaseUrl: mock.baseUrl, targetBranch: 'master', reviewers: [] },
+      'token',
+      silentLogger,
+    );
+    const result = await adapter.createPullRequest(baseInput);
+    assert.equal(result.ok, true);
+    if (result.ok) {
+      assert.equal(result.id, 77);
+      assert.equal(result.url, 'https://bb.org/pr/77');
+      assert.equal(result.updated, true);
+    }
+    assert.equal(mock.requests.length, 2);
+    const getReq = mock.requests[1]!;
+    assert.equal(getReq.method, 'GET');
+    assert.match(getReq.url, /^\/repositories\/my-ws\/repo-a\/pullrequests\?q=/);
+    assert.match(getReq.url, /state=OPEN/);
+  });
+
+  it('Server: treats "only one pull request" (409) as an update', async () => {
+    mock.enqueue({
+      status: 409,
+      body: { errors: [{ message: 'Only one pull request may be open for a given source and target branch' }] },
+    });
+    mock.enqueue({
+      status: 200,
+      body: { values: [{ id: 5, links: { self: [{ href: 'https://srv/pr/5' }] } }] },
+    });
+    const adapter = new BitbucketPrAdapter(
+      { workspace: 'PROJ', apiVariant: 'server', apiBaseUrl: mock.baseUrl, targetBranch: 'master', reviewers: [] },
+      'token',
+      silentLogger,
+    );
+    const result = await adapter.createPullRequest(baseInput);
+    assert.equal(result.ok, true);
+    if (result.ok) {
+      assert.equal(result.id, 5);
+      assert.equal(result.url, 'https://srv/pr/5');
+      assert.equal(result.updated, true);
+    }
+    assert.equal(mock.requests.length, 2);
+    assert.match(mock.requests[1]!.url, /\/rest\/api\/1\.0\/projects\/PROJ\/repos\/repo-a\/pull-requests\?/);
+    assert.match(mock.requests[1]!.url, /direction=OUTGOING/);
+  });
+
   it('handles non-JSON error body gracefully', async () => {
     mock.enqueue({ status: 500, body: 'internal server error' });
     const adapter = new BitbucketPrAdapter(

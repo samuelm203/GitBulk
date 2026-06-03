@@ -36,6 +36,8 @@ export interface Phase4Result {
   prId?: string | number;
   /** PR-URL bei Erfolg */
   prUrl?: string;
+  /** `true`, wenn ein bereits offener PR aktualisiert (nicht neu erstellt) wurde. */
+  prUpdated?: boolean;
   /** HTTP-Statuscode (0 bei Netzwerkfehler) */
   statusCode?: number;
   /** Fehler-Meldung bei Fehlschlag */
@@ -150,7 +152,9 @@ export async function runPhase4(
     result.prId = success.id;
     result.prUrl = success.url;
     result.statusCode = success.statusCode;
-    const msg = `PR successful, ${phase3.ru} (#${success.id})`;
+    if (success.updated === true) result.prUpdated = true;
+    const verb = success.updated === true ? 'updated' : 'successful';
+    const msg = `PR ${verb}, ${phase3.ru} (#${success.id})`;
     logger.info(msg);
     result.notes.push(msg);
   } else {
