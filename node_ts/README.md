@@ -261,6 +261,22 @@ See [`examples/`](./examples) for ready-to-copy configs (YAML, JSON, JS, TS), a
 declarative-operations config (`gitbulk.operations.yaml`), and example code-change scripts
 (`change.mjs`, `change.ts`).
 
+### JSON Schema (editor autocomplete)
+
+A hand-maintained JSON Schema for the config lives at
+[`schema/gitbulk.config.schema.json`](./schema/gitbulk.config.schema.json). Reference it from the
+top of your YAML for autocomplete and inline validation in editors with the YAML language server:
+
+```yaml
+# yaml-language-server: $schema=./schema/gitbulk.config.schema.json
+rus: [my-service-api]
+ticket: AKB-1234
+# …
+```
+
+GitBulk's own Zod validation (`src/config/schema.ts`) remains authoritative — the JSON Schema is a
+best-effort editor aid and may lag behind newly added operations.
+
 ### Script environment variables
 
 Your code-change script receives these environment variables:
@@ -369,6 +385,7 @@ gitbulk [options]
       --no-color         Disable colored output
   -v, --version          Print version and exit
   -h, --help             Show help
+      -fish, -fisch      Show a compact command/option matrix (alias help)
 
 gitbulk init [options]          Interactively generate a config or a standalone .mjs/.ts script
   -o, --output <path>    Output file path

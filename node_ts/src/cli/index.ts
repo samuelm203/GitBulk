@@ -44,6 +44,7 @@ import { runTui } from '../tui/index.js';
 import { runInitGenerator } from './init.js';
 import { runListOperations } from './list-operations.js';
 import { filterRus } from './filter-rus.js';
+import { handleSpecialFlags } from './special-flags.js';
 import { VERSION } from '../index.js';
 
 /** Allgemeiner Hilfetext (Pendant zur früheren Commander-Hilfe). */
@@ -65,6 +66,7 @@ Options:
       --no-color         Disable colored output
   -v, --version          Print version and exit
   -h, --help             Show this help and exit
+      -fish, -fisch      Show a compact command/option matrix
 
 init options:
   -o, --output <path>    Output file path
@@ -78,7 +80,7 @@ const INIT_HELP = `gitbulk init — Generate an operations config or a standalon
 
 Options:
   -o, --output <path>   Output file path
-  -f, --force           Overwrite the output file if it already exists
+  -f, --force           Overwrite the output file instead of auto-incrementing the name
       --no-color        Disable colored output
 `;
 
@@ -88,6 +90,7 @@ const LIST_HELP = `gitbulk list-operations — List all available declarative op
 Options:
       --json   Output as JSON (machine-readable)
 `;
+
 
 /**
  * Parst die CLI-Argumente mit node:util parseArgs.
@@ -150,6 +153,15 @@ function exitCodeFromSummary(summary: Awaited<ReturnType<typeof runBulk>>): numb
  * Hauptfunktion. Wirft NICHT — Fehler werden geloggt und Exit-Code wird gesetzt.
  */
 async function main(): Promise<number> {
+  // Spezial-Flags VOR parseArgs abfangen: `node:util.parseArgs` würde `-fish`
+  // als Kurzoptionen-Cluster fehldeuten. Beides sind reine Ausgabe-Flags.
+  const rawArgs = process.argv.slice(2);
+  const special = handleSpecialFlags(rawArgs, !rawArgs.includes('--no-color'));
+  if (special !== undefined) {
+    process.stdout.write(special);
+    return 0;
+  }
+
   let parsed: ReturnType<typeof parseCliArgs>;
   try {
     parsed = parseCliArgs();
