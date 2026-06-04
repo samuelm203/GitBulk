@@ -1,0 +1,157 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/samuelm203/GitBulk/blob/main/node_ts/schema/gitbulk.config.schema.json",
+  "title": "GitBulk configuration",
+  "description": "Configuration for the GitBulk CLI (YAML/JSON). Hand-maintained; mirrors the Zod schema in src/config/schema.ts. Add `# yaml-language-server: $schema=./schema/gitbulk.config.schema.json` to your YAML for editor autocomplete. Note: GitBulk's own validation is authoritative — this file is a best-effort aid and may lag behind newly added operations.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["rus", "ticket", "branch", "commitMessage", "prSummary", "createPrOnError", "prPlatform"],
+  "properties": {
+    "rus": {
+      "description": "Repository units to process. A comma-separated string or an array. Each name must start alphanumeric and contain only letters, digits, '.', '_', '-' (no path separators or '..').",
+      "oneOf": [
+        { "type": "string", "minLength": 1 },
+        { "type": "array", "items": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$" }, "minItems": 1 }
+      ]
+    },
+    "ticket": {
+      "description": "Ticket identifier, prepended to the branch and commit message (e.g. AKB-1234). Uppercased; alphanumeric segments separated by single hyphens.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9]+(-[A-Za-z0-9]+)*$"
+    },
+    "branch": {
+      "description": "Feature branch name (without the ticket prefix). The full branch becomes `<ticket>-<branch>`.",
+      "type": "string",
+      "minLength": 1
+    },
+    "script": {
+      "description": "Path to a code-change script (.sh/.bash, .bat/.cmd, .ps1, .js/.mjs/.cjs, .ts/.mts/.cts). Set EITHER this OR `operations`, not both.",
+      "type": "string",
+      "minLength": 1
+    },
+    "operations": {
+      "description": "Declarative code-change operations, run in order. Set EITHER this OR `script`. Each entry needs a `type`; remaining keys are operation-specific parameters (see `gitbulk list-operations`).",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["type"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "description": "Operation type, e.g. maven-add-dependency, npm-add-dependency, npm-update, json-patch, add-file, replace-file, delete-file, regex-replace."
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "commitMessage": {
+      "description": "Commit message. The ticket is prepended automatically: `<ticket> <commitMessage>`.",
+      "type": "string",
+      "minLength": 1
+    },
+    "prSummary": {
+      "description": "Title/description for the pull request.",
+      "type": "string",
+      "minLength": 1
+    },
+    "createPrOnError": {
+      "description": "Create a PR even if the code change failed (commit is flagged 'ERROR WHILE CODE CHANGE: …').",
+      "type": "boolean"
+    },
+    "workspaceDir": {
+      "description": "Root directory that contains the RU repositories. Defaults to the current working directory. A leading '~' is expanded to the home directory.",
+      "type": "string"
+    },
+    "cloneIfMissing": {
+      "description": "Clone repositories that are not found locally instead of skipping them. Requires `cloneBaseUrl`.",
+      "type": "boolean",
+      "default": false
+    },
+    "cloneBaseUrl": {
+      "description": "Base URL for `git clone` (used only when `cloneIfMissing` is true), e.g. https://bitbucket.org/my-workspace/.",
+      "type": "string",
+      "format": "uri"
+    },
+    "sourceBranch": {
+      "description": "Branch GitBulk checks out and resets to before creating the feature branch.",
+      "type": "string",
+      "minLength": 1,
+      "default": "master"
+    },
+    "retry": {
+      "description": "Retry behaviour for `git push` and PR API calls.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "maxAttempts": { "type": "integer", "minimum": 1, "maximum": 20, "default": 3 },
+        "backoffMs": { "type": "integer", "minimum": 0, "default": 1000 },
+        "maxBackoffMs": { "type": "integer", "minimum": 0, "default": 30000 }
+      }
+    },
+    "concurrency": {
+      "description": "Number of RUs processed in parallel.",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 50,
+      "default": 1
+    },
+    "commandTimeoutMs": {
+      "description": "Timeout in milliseconds per git command (prevents hanging auth prompts).",
+      "type": "integer",
+      "minimum": 1000,
+      "default": 120000
+    },
+    "dryRun": {
+      "description": "Dry-run mode: no writing git operations, no PR API calls.",
+      "type": "boolean",
+      "default": false
+    },
+    "skipHooks": {
+      "description": "Disable git hooks for all git commands (via core.hooksPath).",
+      "type": "boolean",
+      "default": false
+    },
+    "prPlatform": {
+      "description": "Pull-request platform. Tokens are read from the environment, never from this file.",
+      "enum": ["bitbucket", "github", "azure-devops"]
+    },
+    "bitbucket": {
+      "description": "Bitbucket settings (required when prPlatform is 'bitbucket'). Token: GITBULK_BITBUCKET_TOKEN.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["workspace"],
+      "properties": {
+        "workspace": { "type": "string", "minLength": 1, "description": "Workspace slug (Cloud) or project key (Server)." },
+        "apiVariant": { "enum": ["cloud", "server"], "default": "cloud" },
+        "apiBaseUrl": { "type": "string", "format": "uri" },
+        "targetBranch": { "type": "string", "minLength": 1, "default": "master" },
+        "reviewers": { "type": "array", "items": { "type": "string", "minLength": 1 }, "default": [] }
+      }
+    },
+    "github": {
+      "description": "GitHub settings (required when prPlatform is 'github'). Token: GITBULK_GITHUB_TOKEN.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["owner"],
+      "properties": {
+        "owner": { "type": "string", "minLength": 1, "description": "Repository owner (user or organization)." },
+        "targetBranch": { "type": "string", "minLength": 1, "default": "main" },
+        "apiBaseUrl": { "type": "string", "format": "uri", "description": "API base for GitHub Enterprise, e.g. https://ghe.example.com/api/v3." },
+        "reviewers": { "type": "array", "items": { "type": "string", "minLength": 1 }, "default": [] }
+      }
+    },
+    "azureDevOps": {
+      "description": "Azure DevOps settings (required when prPlatform is 'azure-devops'). Adapter not yet implemented.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["organization", "project"],
+      "properties": {
+        "organization": { "type": "string", "minLength": 1 },
+        "project": { "type": "string", "minLength": 1 },
+        "apiBaseUrl": { "type": "string", "format": "uri" },
+        "targetBranch": { "type": "string", "minLength": 1, "default": "master" },
+        "reviewers": { "type": "array", "items": { "type": "string", "minLength": 1 }, "default": [] }
+      }
+    }
+  }
+}
