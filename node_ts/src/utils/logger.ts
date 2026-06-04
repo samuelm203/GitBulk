@@ -54,6 +54,35 @@ export interface LoggerOptions {
   stdout?: NodeJS.WritableStream;
   /** Ziel-Stream für Fehler-Logs (error). Standard: `process.stderr`. */
   stderr?: NodeJS.WritableStream;
+  /**
+   * Optionale Capture-Senke. Wenn gesetzt, wird JEDE Meldung (ALLE Level,
+   * unabhängig vom Anzeige-Level) als kanonische Zeile gepuffert — Grundlage
+   * für das Deep-Log (`--deep-log`).
+   */
+  capture?: LogCapture;
+}
+
+/**
+ * Sammelt sämtliche Log-Zeilen im Speicher (für `--deep-log`). Hält die
+ * kanonische, farb-freie Form `[ts] [LEVEL] [ru] message`.
+ */
+export class LogCapture {
+  private readonly lines: string[] = [];
+
+  /** Hängt eine bereits formatierte Zeile an. */
+  add(line: string): void {
+    this.lines.push(line);
+  }
+
+  /** Anzahl gepufferter Zeilen. */
+  get size(): number {
+    return this.lines.length;
+  }
+
+  /** Das vollständige Log als String (Zeilen per `\n` verbunden). */
+  toString(): string {
+    return this.lines.join('\n');
+  }
 }
 
 /**
@@ -91,6 +120,7 @@ export function createLogger(options: LoggerOptions = {}): Logger {
   const useColor = !options.noColor;
   const outStream = options.stdout ?? process.stdout;
   const errStream = options.stderr ?? process.stderr;
+  const capture = options.capture;
 
   /**
    * Internes Log-Helper. Prüft das Level, formatiert die Meldung
@@ -102,6 +132,18 @@ export function createLogger(options: LoggerOptions = {}): Logger {
     message: string,
     args: unknown[],
   ): void {
+    // Capture ZUERST und unabhängig vom Anzeige-Level: das Deep-Log soll jede
+    // Meldung enthalten (kanonisch, farb-frei, immer mit Zeitstempel).
+    if (capture) {
+      const ru = ruContext ? ` [${ruContext}]` : '';
+      capture.add(`[${timestamp()}] [${msgLevel.toUpperCase()}]${ru} ${message}`);
+      for (const arg of args) {
+        if (arg instanceof Error) capture.add(arg.stack ?? arg.message);
+        else if (typeof arg === 'object' && arg !== null) capture.add(JSON.stringify(arg));
+        else if (arg !== undefined) capture.add(String(arg));
+      }
+    }
+
     if (LEVEL_WEIGHTS[msgLevel] < LEVEL_WEIGHTS[level]) {
       return;
     }

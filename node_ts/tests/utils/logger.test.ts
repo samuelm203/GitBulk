@@ -8,7 +8,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { createLogger, LOG_LEVELS } from '../../src/utils/logger.js';
+import { createLogger, LOG_LEVELS, LogCapture } from '../../src/utils/logger.js';
 
 /**
  * Hilfsfunktion: capturt alle stdout/stderr-Writes während `fn` läuft.
@@ -160,6 +160,38 @@ describe('Logger', () => {
     });
     assert.equal(realStdout, '', 'must use the injected stream, not real stdout');
     assert.match(captured, /\[INFO\].*routed/);
+  });
+
+  it('captures every level into a LogCapture, regardless of the display level', async () => {
+    const capture = new LogCapture();
+    const logger = createLogger({ level: 'warn', noColor: true, capture });
+    // Auch debug/info werden gepuffert, obwohl sie NICHT angezeigt werden.
+    await captureOutput(() => {
+      logger.debug('a debug');
+      logger.info('an info');
+      logger.warn('a warning');
+      logger.withRu('repo-x').error('an error');
+    });
+    assert.equal(capture.size, 4);
+    const text = capture.toString();
+    assert.match(text, /\[DEBUG\] a debug/);
+    assert.match(text, /\[INFO\] an info/);
+    assert.match(text, /\[WARN\] a warning/);
+    assert.match(text, /\[ERROR\] \[repo-x\] an error/);
+    // Kanonische Capture-Zeilen tragen immer einen Zeitstempel.
+    assert.match(text, /\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/);
+  });
+
+  it('captures extra args (errors/objects) as separate lines', async () => {
+    const capture = new LogCapture();
+    const logger = createLogger({ level: 'error', noColor: true, capture });
+    await captureOutput(() => {
+      logger.error('failed:', new Error('boom'), { code: 7 });
+    });
+    const text = capture.toString();
+    assert.match(text, /\[ERROR\] failed:/);
+    assert.match(text, /boom/);
+    assert.match(text, /"code":7/);
   });
 
   it('serializes object args as JSON', async () => {

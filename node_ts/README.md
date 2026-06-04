@@ -347,6 +347,8 @@ gitbulk init --force               # overwrite the existing output file instead 
 
 > The API token is never written to the config — it is read at runtime from an environment
 > variable: `GITBULK_BITBUCKET_TOKEN` for Bitbucket, `GITBULK_GITHUB_TOKEN` for GitHub.
+> If the variable is missing, GitBulk **prompts for it (hidden input)** when running in a real
+> terminal and keeps it in memory only; in non-interactive/CI runs it exits with a clear error.
 
 ---
 
@@ -360,6 +362,8 @@ gitbulk [options]
                          missing fields). Default: hybrid
       --dry-run          Do not perform any write operations (push, PR API)
       --tui              Run with an interactive terminal UI showing live per-RU progress
+      --deep-log         Record a granular step-by-step log; at the end choose [D]ownload
+                         (writes ./gitbulk/gitbulk-log-<ts>.log) or [P]rint. Non-TTY: file.
       --only <rus>       Only process these RUs (comma-separated subset of the configured RUs)
   -l, --log-level <lvl>  debug | info | warn | error. Default: info
       --no-color         Disable colored output
