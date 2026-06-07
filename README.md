@@ -16,27 +16,12 @@ environment:
 
 | | Implementation | Docs |
 | --- | --- | --- |
-| **TypeScript / Node.js** | The reference implementation. Runs on a **minimal dependency footprint** (only `yaml` + `zod`; everything else is native Node). Node ≥ 20. | **[`node_ts/`](./node_ts) → [README](./node_ts/README.md)** |
-| **PowerShell** | A native PowerShell 7.2+ port with the same workflow — no Node runtime required. | **[`powershell/`](./powershell) → [README](./powershell/README.md)** |
+| **TypeScript / Node.js** | The reference implementation. Runs on a **minimal dependency footprint** (only `yaml` + `zod`; everything else is native Node). Node ≥ 20. | **[README](./node_ts/README.md)** |
+| **PowerShell** | A native PowerShell 7.2+ port with the same workflow — no Node runtime required. | **[README](./powershell/README.md)** |
 
 Both define the change per repository via a free **script** *or* a chain of declarative
 **operations** (add/replace/delete a file, regex replace, add a Maven/npm dependency, patch JSON),
 and automate pull requests on **Bitbucket** (Cloud & Server) and **GitHub** (incl. Enterprise).
-
-## Quick start (Node.js)
-
-```bash
-git clone https://github.com/samuelm203/GitBulk.git
-cd GitBulk/node_ts
-npm install && npm run build
-
-node dist/cli/index.js init                                # generate a config interactively
-node dist/cli/index.js --config gitbulk.config.yaml --dry-run   # preview a run
-```
-
-See the **[`node_ts/` README](./node_ts/README.md)** for installation, the full configuration and
-operations reference, the architecture overview, security notes, and CLI details — or the
-**[`powershell/` README](./powershell/README.md)** for the PowerShell port.
 
 ## License
 
