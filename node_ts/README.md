@@ -22,7 +22,6 @@ deliberately **tiny dependency footprint** (see below).
 
 ## Table of Contents
 
-- [Minimal dependencies](#minimal-dependencies)
 - [Features](#features)
 - [Requirements](#requirements)
 - [Installation](#installation)
@@ -38,31 +37,6 @@ deliberately **tiny dependency footprint** (see below).
 - [Edge cases & safety](#edge-cases--safety)
 - [Development](#development)
 - [License](#license)
-
----
-
-## Minimal dependencies
-
-GitBulk runs on **just two runtime dependencies**:
-
-| Dependency | Why it stays |
-| ---------- | ------------ |
-| **`zod`**  | Schema validation for the config and for every operation's parameters. Security-relevant — malformed configs are rejected early, with precise messages. Also powers the schema introspection behind `list-operations` and `init`. |
-| **`yaml`** | YAML config parsing. Node has no built-in YAML parser, and dropping YAML support would be a real regression. |
-
-**Everything else uses native Node.js APIs.** Dependencies that were previously used have been
-removed in favor of the standard library:
-
-| Removed      | Replaced by                                                            |
-| ------------ | ---------------------------------------------------------------------- |
-| `commander`  | `node:util`'s `parseArgs` + a small hand-written subcommand dispatcher |
-| `p-limit`    | a ~25-line concurrency limiter — [`src/utils/concurrency.ts`](./src/utils/concurrency.ts) |
-| `chalk`      | a tiny ANSI color helper — [`src/utils/colors.ts`](./src/utils/colors.ts) |
-| `ora`        | the zero-dependency ANSI Terminal UI in [`src/tui/`](./src/tui)        |
-
-The interactive prompts and the live Terminal UI are built directly on `node:readline` and ANSI
-escape codes — no UI framework, no spinner library. The result is a small, auditable install with
-a minimal supply-chain surface.
 
 ---
 
