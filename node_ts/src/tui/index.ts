@@ -23,6 +23,7 @@ import { printRunSummary } from '../core/reporter.js';
 import { detectGit } from '../git/executor.js';
 import { createLogger, setDefaultLogger, LogCapture } from '../utils/logger.js';
 import { TuiRenderer, type TuiRuRow, type TuiRuStatus } from './render.js';
+import { TuiLogBuffer } from './log-buffer.js';
 import { filterRus } from '../cli/filter-rus.js';
 import { ensurePrToken } from '../cli/token-prompt.js';
 import { finishDeepLog } from '../cli/deep-log.js';
@@ -92,16 +93,19 @@ export async function runTui(options: TuiOptions = {}): Promise<number> {
   // Spinner nur bei echtem TTY (sonst statisches Symbol, keine Live-Animation).
   const useSpinner = isTty;
 
-  // WICHTIG: Im TUI-Modus MÜSSEN alle Logs nach stderr — sonst kollidieren sie
-  // mit dem stdout-basierten Live-Renderer (cursor-up/clear-line), verschieben
-  // dessen Frame und führen zu duplizierter/zerschossener Darstellung. stdout
-  // gehört exklusiv dem Renderer + dem Abschluss-Report.
+  // WICHTIG: Während der Live-Renderer aktiv ist, darf NICHTS anderes ins
+  // Terminal schreiben — auch stderr landet auf demselben Bildschirm und
+  // verschiebt den in-place gezeichneten Frame (cursor-up-Zählung kippt →
+  // duplizierte/zerschossene Darstellung). Deshalb laufen ALLE Logs durch
+  // einen Puffer: vor/nach dem Live-Rendering direkt auf stderr, währenddessen
+  // gesammelt und nach `renderer.stop()` am Stück ausgegeben.
   const deepCapture = options.deepLog ? new LogCapture() : undefined;
+  const logSink = new TuiLogBuffer(process.stderr);
   const logger = createLogger({
     level: 'warn',
     noColor: !useColor,
-    stdout: process.stderr,
-    stderr: process.stderr,
+    stdout: logSink,
+    stderr: logSink,
     ...(deepCapture ? { capture: deepCapture } : {}),
   });
   setDefaultLogger(logger);
@@ -171,14 +175,29 @@ export async function runTui(options: TuiOptions = {}): Promise<number> {
   }
 
   // ── Renderer vorbereiten ───────────────────────────────────────
+  // Passt der komplette Frame (Titel + 1 Zeile pro RU + Leerzeile + Footer)
+  // nicht in die Terminalhöhe, kann cursor-up nicht über den oberen Rand
+  // hinausfahren — das in-place-Redraw würde die Darstellung zerreißen.
+  // Dann lieber sauber auf den append-only Plain-Modus ausweichen.
+  const frameHeight = config.rus.length + 3;
+  const terminalRows = process.stdout.rows;
+  const fitsScreen = typeof terminalRows !== 'number' || frameHeight < terminalRows;
+  if (isTty && !fitsScreen) {
+    process.stderr.write(
+      `Note: ${config.rus.length} RUs do not fit the terminal height — using append-only output.\n`,
+    );
+  }
+
   const rows: TuiRuRow[] = config.rus.map((ru) => ({ ru, status: 'pending' as const }));
   const renderer = new TuiRenderer(rows, {
     noColor: !useColor,
     noSpinner: !useSpinner,
-    plain: !isTty,
+    plain: !isTty || !fitsScreen,
     title: `GitBulk — ${config.rus.length} RUs, concurrency ${config.concurrency}${config.dryRun ? ' [DRY-RUN]' : ''}`,
   });
 
+  // Ab hier gehört das Terminal dem Renderer — Logs puffern.
+  logSink.beginBuffering();
   renderer.start();
 
   // ── Lauf mit Live-Progress ─────────────────────────────────────
@@ -196,11 +215,14 @@ export async function runTui(options: TuiOptions = {}): Promise<number> {
     summary = await runBulk(config, runOpts);
   } catch (err) {
     renderer.stop();
+    logSink.flush();
     writeErr(`Error during run: ${(err as Error).message}`);
     return 3;
   }
 
   renderer.stop();
+  // Während des Laufs zurückgehaltene Logs jetzt gesammelt ausgeben.
+  logSink.flush();
 
   // ── Abschluss-Report (ausführlich, unter der Live-Liste) ───────
   printRunSummary(summary, { noColor: !useColor });
