@@ -104,7 +104,7 @@ function resolveRepoPath(workspaceDir: string | undefined, ru: string): string {
  * @returns `Phase3Result` mit `prStatus` für Phase 4
  */
 export async function runPhase3(ru: string, config: GitBulkConfig): Promise<Phase3Result> {
-  const logger = (config.dryRun ? getDefaultLogger() : getDefaultLogger()).withRu(ru);
+  const logger = getDefaultLogger().withRu(ru);
   const repoPath = resolveRepoPath(config.workspaceDir, ru);
   const featureBranch = buildFeatureBranchName(config.ticket, config.branch);
 
