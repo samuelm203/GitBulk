@@ -11,6 +11,7 @@ import assert from 'node:assert/strict';
 import {
   buildFrame,
   countByStatus,
+  truncateToWidth,
   TuiRenderer,
   SPINNER_FRAMES,
   type TuiRuRow,
@@ -186,6 +187,41 @@ describe('buildFrame', () => {
   });
 });
 
+describe('truncateToWidth', () => {
+  it('leaves short and exact-width lines untouched', () => {
+    assert.equal(truncateToWidth('hello', 10), 'hello');
+    assert.equal(truncateToWidth('exactly10!', 10), 'exactly10!');
+  });
+
+  it('truncates long plain lines to width with an ellipsis', () => {
+    const out = truncateToWidth('abcdefghij', 5);
+    assert.equal(out, 'abcd…');
+  });
+
+  it('does not count ANSI sequences as visible width', () => {
+    const colored = '\u001b[32mok\u001b[0m';
+    // 2 sichtbare Zeichen → passt locker in width 5, bleibt unverändert.
+    assert.equal(truncateToWidth(colored, 5), colored);
+  });
+
+  it('never cuts an ANSI sequence in half and appends a reset', () => {
+    const line = `\u001b[32m${'x'.repeat(20)}\u001b[0m`;
+    const out = truncateToWidth(line, 8);
+    // Beginnt mit der vollständigen Farb-Sequenz, endet mit … + Reset.
+    assert.ok(out.startsWith('\u001b[32m'));
+    assert.ok(out.endsWith('…\u001b[0m'));
+    // Sichtbare Breite = width: 7 x + Ellipse.
+    // eslint-disable-next-line no-control-regex
+    const visible = out.replace(/\u001b\[[0-9;?]*[A-Za-z]/g, '');
+    assert.equal(visible, `${'x'.repeat(7)}…`);
+  });
+
+  it('returns the line unchanged for degenerate widths', () => {
+    assert.equal(truncateToWidth('abc', 0), 'abc');
+    assert.equal(truncateToWidth('abc', 1), 'abc');
+  });
+});
+
 describe('TuiRenderer', () => {
   it('draws initial frame on start', () => {
     const { stream, getOutput } = makeMockStream();
@@ -281,9 +317,74 @@ describe('TuiRenderer', () => {
     const delta = getOutput().slice(afterStart);
 
     // eslint-disable-next-line no-control-regex
-    const m = /\[(\d+)A/.exec(delta);
+    const m = /\u001b\[(\d+)A/.exec(delta);
     assert.ok(m, 'expected a cursor-up escape on redraw');
     assert.equal(Number(m![1]), expectedLines, 'cursor-up count must match previous frame lines');
+    renderer.stop();
+  });
+
+  it('truncates frame lines to the stream columns (no terminal wrap)', () => {
+    // Mock-Stream MIT columns-Angabe (wie ein echtes TTY).
+    let buffer = '';
+    const stream = {
+      write: (chunk: string | Uint8Array): boolean => {
+        buffer += typeof chunk === 'string' ? chunk : chunk.toString();
+        return true;
+      },
+      columns: 24,
+    } as unknown as NodeJS.WritableStream;
+
+    const longRu = 'a-very-long-repository-name-that-exceeds-the-terminal-width';
+    const renderer = new TuiRenderer([{ ru: longRu, status: 'pending' }], {
+      out: stream,
+      noColor: true,
+      noSpinner: true,
+    });
+    renderer.start();
+    renderer.stop();
+
+    // Keine sichtbare Zeile darf breiter als columns sein (sonst Wrap → kaputtes
+    // Redraw). `\r` (cursor an Zeilenanfang) ist Steuerung, keine Breite.
+    const lines = stripAnsi(buffer)
+      .split('\n')
+      .map((l) => l.replace(/\r/g, ''));
+    for (const line of lines) {
+      assert.ok(line.length <= 24, `line exceeds terminal width: "${line}" (${line.length})`);
+    }
+    assert.ok(buffer.includes('…'), 'expected the long RU name to be truncated');
+  });
+
+  it('registers a cursor-restore exit handler while live and removes it on stop', () => {
+    const { stream } = makeMockStream();
+    const before = process.listenerCount('exit');
+    const renderer = new TuiRenderer([{ ru: 'a', status: 'pending' }], {
+      out: stream,
+      noColor: false, // Cursor wird versteckt → Sicherheitsnetz nötig
+    });
+    renderer.start();
+    assert.equal(process.listenerCount('exit'), before + 1, 'expected exit handler while live');
+    renderer.stop();
+    assert.equal(process.listenerCount('exit'), before, 'exit handler must be removed on stop');
+  });
+
+  it('resets the redraw state on restart (no cursor-up over foreign output)', () => {
+    const { stream, getOutput } = makeMockStream();
+    const renderer = new TuiRenderer([{ ru: 'a', status: 'pending' }], {
+      out: stream,
+      noColor: true,
+      noSpinner: true,
+    });
+    renderer.start();
+    renderer.update('a', 'done');
+    renderer.stop();
+
+    const lenAfterFirst = getOutput().length;
+    renderer.start();
+    const delta = getOutput().slice(lenAfterFirst);
+    // Der erste Draw nach einem Neustart darf KEINEN cursor-up enthalten —
+    // sonst würde er über fremde Ausgabe (z. B. den Report) hochfahren.
+    // eslint-disable-next-line no-control-regex
+    assert.doesNotMatch(delta, /\u001b\[[0-9]+A/, 'restart must not move the cursor up');
     renderer.stop();
   });
 

@@ -401,8 +401,11 @@ The TUI works in both modes:
 Tip: combine with `--dry-run` to watch a full run safely without pushing anything. Use
 `--no-color` in environments without ANSI support; the spinner falls back to a static symbol.
 
-In TUI mode all log output is written to **stderr** so it never interferes with the live view on
-stdout — redirect with `2>run.log` if you want to capture the per-RU log alongside the UI.
+While the live view is on screen, log messages (warnings, errors) are **held back** and printed
+in one block right after the run — so nothing can shift or corrupt the in-place rendering. They
+go to **stderr**, so `2>run.log` still captures them separately. Long repository names are
+truncated to the terminal width, and if the repository list is taller than the terminal, GitBulk
+automatically falls back to simple append-only output instead of the live view.
 
 ---
 

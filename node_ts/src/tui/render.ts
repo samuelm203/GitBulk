@@ -121,6 +121,49 @@ function colorize(text: string, color: string, noColor: boolean): string {
   return `${color}${text}${ANSI.reset}`;
 }
 
+/** Erkennt eine vollständige ANSI-CSI-Sequenz am String-Anfang. */
+// eslint-disable-next-line no-control-regex
+const ANSI_SEQ_AT_START = /^\u001b\[[0-9;?]*[A-Za-z]/;
+/** Alle ANSI-CSI-Sequenzen (für die Längenmessung ohne Steuercodes). */
+// eslint-disable-next-line no-control-regex
+const ANSI_SEQ_ALL = /\u001b\[[0-9;?]*[A-Za-z]/g;
+
+/**
+ * Kürzt eine Zeile ANSI-bewusst auf `width` sichtbare Zeichen (mit `…`).
+ *
+ * Warum: Der Renderer fährt beim Redraw `lastLineCount` Zeilen hoch. Bricht
+ * eine zu lange Zeile im Terminal um, belegt sie ZWEI physische Zeilen — die
+ * cursor-up-Zählung stimmt nicht mehr und die Darstellung zerreißt. Deshalb
+ * darf keine Frame-Zeile breiter als das Terminal sein. ANSI-Sequenzen zählen
+ * nicht zur sichtbaren Breite und werden nie mittendrin zerschnitten; bei
+ * gekürzten farbigen Zeilen wird ein Reset angehängt (kein Farb-Ausbluten).
+ */
+export function truncateToWidth(line: string, width: number): string {
+  if (width <= 1) return line;
+  const plainLength = line.replace(ANSI_SEQ_ALL, '').length;
+  if (plainLength <= width) return line;
+
+  let out = '';
+  let visible = 0;
+  let i = 0;
+  let hasAnsi = false;
+  while (i < line.length && visible < width - 1) {
+    if (line[i] === '\u001b') {
+      const m = ANSI_SEQ_AT_START.exec(line.slice(i));
+      if (m) {
+        out += m[0];
+        hasAnsi = true;
+        i += m[0].length;
+        continue;
+      }
+    }
+    out += line[i];
+    visible++;
+    i++;
+  }
+  return `${out}…${hasAnsi ? ANSI.reset : ''}`;
+}
+
 /**
  * Baut die Textzeilen für die aktuelle Liste (ohne sie auszugeben).
  * Reine Funktion → einfach testbar.
@@ -203,6 +246,12 @@ export class TuiRenderer {
   private started = false;
   private spinnerFrame = 0;
   private spinnerTimer: ReturnType<typeof setInterval> | undefined;
+  /**
+   * Sicherheitsnetz: stellt den Cursor auch bei hartem Prozess-Ende wieder her
+   * (z. B. zweites Ctrl+C → `process.exit(130)`), wenn `stop()` nie läuft —
+   * sonst bleibt der Terminal-Cursor des Nutzers unsichtbar.
+   */
+  private exitHandler: (() => void) | undefined;
 
   constructor(rows: TuiRuRow[], options: TuiRenderOptions = {}) {
     this.rows = rows.map((r) => ({ ...r }));
@@ -217,9 +266,18 @@ export class TuiRenderer {
   start(): void {
     if (this.started) return;
     this.started = true;
+    // Frischer Zustand bei (Wieder-)Start: der erste Draw darf NICHT über
+    // fremden/alten Inhalt hochfahren.
+    this.lastLineCount = 0;
     // Im Plain-Modus (kein TTY) wird nicht live gezeichnet — erst am Ende.
     if (this.plain) return;
-    if (!this.noColor) this.out.write(ANSI.hideCursor);
+    if (!this.noColor) {
+      this.out.write(ANSI.hideCursor);
+      this.exitHandler = (): void => {
+        this.out.write(ANSI.showCursor);
+      };
+      process.on('exit', this.exitHandler);
+    }
     this.draw();
     this.syncSpinnerTimer();
   }
@@ -253,6 +311,10 @@ export class TuiRenderer {
     if (!this.started) return;
     this.started = false;
     this.stopSpinnerTimer();
+    if (this.exitHandler) {
+      process.removeListener('exit', this.exitHandler);
+      this.exitHandler = undefined;
+    }
     if (this.plain) {
       // Im Plain-Modus am Ende einmalig den finalen Frame ausgeben.
       const frame = buildFrame(this.rows, {
@@ -311,13 +373,19 @@ export class TuiRenderer {
       ...(this.title !== undefined ? { title: this.title } : {}),
     });
 
+    // Terminalbreite bei JEDEM Draw frisch lesen (Resize während des Laufs):
+    // Zeilen breiter als das Terminal würden umbrechen und die cursor-up-
+    // Zeilenzahl unbrauchbar machen → ANSI-bewusst kürzen.
+    const columns = (this.out as Partial<NodeJS.WriteStream>).columns;
+
     // Cursor hochfahren und alte Zeilen löschen.
     let output = '';
     if (this.lastLineCount > 0) {
       output += ANSI.cursorUp(this.lastLineCount);
     }
     for (const line of frame) {
-      output += `${ANSI.clearLine}${ANSI.lineStart}${line}\n`;
+      const fitted = typeof columns === 'number' ? truncateToWidth(line, columns) : line;
+      output += `${ANSI.clearLine}${ANSI.lineStart}${fitted}\n`;
     }
 
     this.out.write(output);

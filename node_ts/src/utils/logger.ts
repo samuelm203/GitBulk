@@ -39,6 +39,15 @@ const LEVEL_WEIGHTS: Record<LogLevel, number> = {
 /**
  * Optionen für die Logger-Erstellung.
  */
+/**
+ * Minimales Schreib-Interface für Log-Ziele. `process.stdout`/`process.stderr`
+ * erfüllen es ebenso wie eigene Senken (z. B. der TUI-Log-Puffer), ohne das
+ * volle `NodeJS.WritableStream`-Interface implementieren zu müssen.
+ */
+export interface LogSink {
+  write(chunk: string | Uint8Array): boolean;
+}
+
 export interface LoggerOptions {
   /** Minimales Log-Level. Standard: `'info'`. */
   level?: LogLevel;
@@ -47,13 +56,13 @@ export interface LoggerOptions {
   /** Wenn `true`, wird Farbe deaktiviert (z. B. für CI-Logs). Standard: `false`. */
   noColor?: boolean;
   /**
-   * Ziel-Stream für nicht-Fehler-Logs (debug/info/warn). Standard: `process.stdout`.
-   * Injizierbar, damit z. B. der TUI-Modus ALLE Logs nach stderr leiten kann und
+   * Ziel-Senke für nicht-Fehler-Logs (debug/info/warn). Standard: `process.stdout`.
+   * Injizierbar, damit z. B. der TUI-Modus ALLE Logs puffern/umleiten kann und
    * stdout exklusiv dem Live-Renderer (+ Abschluss-Report) gehört.
    */
-  stdout?: NodeJS.WritableStream;
-  /** Ziel-Stream für Fehler-Logs (error). Standard: `process.stderr`. */
-  stderr?: NodeJS.WritableStream;
+  stdout?: LogSink;
+  /** Ziel-Senke für Fehler-Logs (error). Standard: `process.stderr`. */
+  stderr?: LogSink;
   /**
    * Optionale Capture-Senke. Wenn gesetzt, wird JEDE Meldung (ALLE Level,
    * unabhängig vom Anzeige-Level) als kanonische Zeile gepuffert — Grundlage
