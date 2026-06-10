@@ -44,7 +44,11 @@ export function prTokenEnvVar(platform: PrPlatform): string | undefined {
     case 'github':
       return 'GITBULK_GITHUB_TOKEN';
     case 'azure-devops':
-      return 'GITBULK_AZURE_DEVOPS_TOKEN';
+      // Adapter ist noch nicht implementiert — hier KEINEN Token abfragen,
+      // sonst tippt der Nutzer einen Token ein und bekommt direkt danach
+      // "not implemented" vom Adapter. Sobald der Adapter existiert:
+      // 'GITBULK_AZURE_DEVOPS_TOKEN'.
+      return undefined;
     default:
       return undefined;
   }

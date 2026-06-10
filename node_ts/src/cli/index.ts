@@ -184,6 +184,17 @@ async function main(): Promise<number> {
     return 3;
   };
 
+  // Bulk-Flow-Optionen, die in Subkommandos nichts bewirken — dort als Fehler
+  // melden statt still zu ignorieren (Gegenstück zur strayOpts-Prüfung unten).
+  const bulkOnly = ['config', 'mode', 'dry-run', 'tui', 'deep-log', 'only', 'log-level'];
+  const bulkOnlyError = (sub: string): number | undefined => {
+    const stray = bulkOnly.filter((o) => provided.has(o));
+    if (stray.length === 0) return undefined;
+    return usageError(
+      `Option(s) ${stray.map((o) => `--${o}`).join(', ')} are not valid for \`${sub}\` (bulk-flow only).`,
+    );
+  };
+
   // ── Version / Hilfe ────────────────────────────────────────────
   if (values.version) {
     process.stdout.write(`${VERSION}\n`);
@@ -201,6 +212,8 @@ async function main(): Promise<number> {
       return 0;
     }
     if (provided.has('json')) return usageError('`--json` is not valid for `init`.');
+    const initStray = bulkOnlyError('init');
+    if (initStray !== undefined) return initStray;
     if (positionals.length > 1) return usageError(`Unexpected argument "${positionals[1]}" for init.`);
     const initOpts: Parameters<typeof runInitGenerator>[0] = { noColor: !useColor };
     if (values.output !== undefined) initOpts.outputPath = values.output;
@@ -215,6 +228,8 @@ async function main(): Promise<number> {
     if (provided.has('output') || provided.has('force')) {
       return usageError('`--output`/`--force` are only valid for `init`.');
     }
+    const listStray = bulkOnlyError('list-operations');
+    if (listStray !== undefined) return listStray;
     if (positionals.length > 1) {
       return usageError(`Unexpected argument "${positionals[1]}" for list-operations.`);
     }
@@ -296,7 +311,9 @@ async function main(): Promise<number> {
     if (opts.config) tuiOpts.configPath = opts.config;
     if (opts.only !== undefined) tuiOpts.only = opts.only;
     if (opts.deepLog) tuiOpts.deepLog = true;
-    return runTui(tuiOpts);
+    const tuiCode = await runTui(tuiOpts);
+    // Abgebrochener Lauf (Ctrl+C) darf NICHT wie Erfolg aussehen → Exit 130.
+    return abortController.signal.aborted ? 130 : tuiCode;
   }
 
   // ── Git-Verfügbarkeit prüfen ───────────────────────────────────
@@ -378,6 +395,11 @@ async function main(): Promise<number> {
   if (deepCapture) {
     await finishDeepLog(deepCapture, { interactive });
   }
+
+  // Abgebrochener Lauf (Ctrl+C): nicht verarbeitete RUs zählen nur als
+  // "not processed" und würden Exit 0 ("Erfolg") liefern — für Skripte/CI
+  // muss ein Abbruch aber als solcher erkennbar sein (dokumentiert: 130).
+  if (abortController.signal.aborted) return 130;
 
   return exitCodeFromSummary(summary);
 }
