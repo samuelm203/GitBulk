@@ -54,4 +54,16 @@ describe('CLI usage hygiene (subcommand vs bulk-flow options)', () => {
     assert.equal(r.status, 0);
     assert.match(r.stdout, /gitbulk init/);
   });
+
+  it('rejects --gui combined with --tui (mutually exclusive views)', () => {
+    const r = runCli(['--gui', '--tui', '--no-color']);
+    assert.equal(r.status, 3);
+    assert.match(r.stderr, /mutually exclusive/);
+  });
+
+  it('rejects --gui for subcommands like init', () => {
+    const r = runCli(['init', '--gui', '--no-color']);
+    assert.equal(r.status, 3);
+    assert.match(r.stderr, /--gui/);
+  });
 });

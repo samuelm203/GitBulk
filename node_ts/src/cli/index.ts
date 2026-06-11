@@ -41,6 +41,7 @@ import { finishDeepLog } from './deep-log.js';
 import { runBulk } from '../core/runner.js';
 import { printRunSummary } from '../core/reporter.js';
 import { runTui } from '../tui/index.js';
+import { runGui } from '../gui/index.js';
 import { runInitGenerator } from './init.js';
 import { runListOperations } from './list-operations.js';
 import { filterRus } from './filter-rus.js';
@@ -60,6 +61,7 @@ Options:
   -m, --mode <mode>      Config mode: "strict" or "hybrid" (default: hybrid)
       --dry-run          Do not perform any write operations (push, PR API)
       --tui              Interactive terminal UI with live per-RU progress
+      --gui              Browser dashboard (127.0.0.1): live process view, started via button
       --deep-log         Record a granular step-by-step log; offer to save/print it at the end
       --only <rus>       Only process these RUs (comma-separated subset)
   -l, --log-level <lvl>  Log level: ${LOG_LEVELS.join(' | ')} (default: info)
@@ -109,6 +111,7 @@ function parseCliArgs() {
       mode: { type: 'string', short: 'm', default: 'hybrid' },
       'dry-run': { type: 'boolean', default: false },
       tui: { type: 'boolean', default: false },
+      gui: { type: 'boolean', default: false },
       'deep-log': { type: 'boolean', default: false },
       only: { type: 'string' },
       'log-level': { type: 'string', short: 'l', default: 'info' },
@@ -186,7 +189,7 @@ async function main(): Promise<number> {
 
   // Bulk-Flow-Optionen, die in Subkommandos nichts bewirken — dort als Fehler
   // melden statt still zu ignorieren (Gegenstück zur strayOpts-Prüfung unten).
-  const bulkOnly = ['config', 'mode', 'dry-run', 'tui', 'deep-log', 'only', 'log-level'];
+  const bulkOnly = ['config', 'mode', 'dry-run', 'tui', 'gui', 'deep-log', 'only', 'log-level'];
   const bulkOnlyError = (sub: string): number | undefined => {
     const stray = bulkOnly.filter((o) => provided.has(o));
     if (stray.length === 0) return undefined;
@@ -254,11 +257,16 @@ async function main(): Promise<number> {
     mode: values.mode ?? 'hybrid',
     dryRun: values['dry-run'] ?? false,
     tui: values.tui ?? false,
+    gui: values.gui ?? false,
     deepLog: values['deep-log'] ?? false,
     only: values.only,
     logLevel: values['log-level'] ?? 'info',
     color: useColor,
   };
+
+  if (opts.tui && opts.gui) {
+    return usageError('`--tui` and `--gui` are mutually exclusive — pick one view.');
+  }
 
   // ── Logger initialisieren ──────────────────────────────────────
   let logLevel: LogLevel;
@@ -314,6 +322,20 @@ async function main(): Promise<number> {
     const tuiCode = await runTui(tuiOpts);
     // Abgebrochener Lauf (Ctrl+C) darf NICHT wie Erfolg aussehen → Exit 130.
     return abortController.signal.aborted ? 130 : tuiCode;
+  }
+
+  // ── GUI-Modus: Browser-Dashboard (lokal), Lauf startet per Button ──
+  if (opts.gui) {
+    const guiOpts: Parameters<typeof runGui>[0] = {
+      mode: opts.mode as 'strict' | 'hybrid',
+      dryRun: opts.dryRun,
+      signal: abortController.signal,
+    };
+    if (opts.config) guiOpts.configPath = opts.config;
+    if (opts.only !== undefined) guiOpts.only = opts.only;
+    // Kein deepLog-Durchreichen: im GUI-Modus ist das Deep-Log IMMER aktiv.
+    const guiCode = await runGui(guiOpts);
+    return abortController.signal.aborted ? 130 : guiCode;
   }
 
   // ── Git-Verfügbarkeit prüfen ───────────────────────────────────

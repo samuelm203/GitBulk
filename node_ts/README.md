@@ -31,6 +31,7 @@ deliberately **tiny dependency footprint** (see below).
 - [Generating a config with `gitbulk init`](#generating-a-config-with-gitbulk-init)
 - [CLI options](#cli-options)
 - [Terminal UI (TUI)](#terminal-ui-tui)
+- [GUI (browser dashboard)](#gui-browser-dashboard)
 - [Architecture & how a run works](#architecture--how-a-run-works)
 - [Security](#security)
 - [Exit codes](#exit-codes)
@@ -352,6 +353,8 @@ gitbulk [options]
                          missing fields). Default: hybrid
       --dry-run          Do not perform any write operations (push, PR API)
       --tui              Run with an interactive terminal UI showing live per-RU progress
+      --gui              Open a local browser dashboard (127.0.0.1) with a live process view;
+                         the run is started via a button in the page
       --deep-log         Record a granular step-by-step log; at the end choose [D]ownload
                          (writes ./gitbulk/gitbulk-log-<ts>.log) or [P]rint. Non-TTY: file.
       --only <rus>       Only process these RUs (comma-separated subset of the configured RUs)
@@ -406,6 +409,39 @@ in one block right after the run — so nothing can shift or corrupt the in-plac
 go to **stderr**, so `2>run.log` still captures them separately. Long repository names are
 truncated to the terminal width, and if the repository list is taller than the terminal, GitBulk
 automatically falls back to simple append-only output instead of the live view.
+
+---
+
+## GUI (browser dashboard)
+
+Pass `--gui` to watch a run in a polished local **browser dashboard** instead of the terminal:
+
+```bash
+gitbulk --gui --config gitbulk.config.yaml            # real run, started via button
+gitbulk --gui --config gitbulk.config.yaml --dry-run  # safe preview of the full flow
+```
+
+GitBulk starts a small local web server (bound to **127.0.0.1 only**, random port), opens your
+default browser, and streams the run live via Server-Sent Events:
+
+- **Process view** modeled after the project flowchart — *Bitbucket Repo → Anpassen →
+  PR erstellen* with an animated loop arrow while repositories are being processed.
+- **One card per repository** with a mini pipeline whose stages switch on real runner events
+  (`git` phase vs. `pr` phase), plus duration, a clickable PR link (with an *updated* badge on
+  re-runs), and error details.
+- **Live counters** (created / updated / failed / skipped), progress bar and run timer.
+- **Live log panel** streaming the full granular logger output (debug level). In GUI mode the
+  **deep log is always on** — no `--deep-log` flag needed; after the run it is saved
+  automatically to `gitbulk/gitbulk-log-<timestamp>.log`.
+
+The run does **not** start automatically — click *Run starten* in the page. When the run
+finishes, the summary is also printed to the terminal, the process exits with the usual
+[exit codes](#exit-codes), and the page keeps its final state. Tokens are never sent to the
+page; the server only ever exposes repository names and run status. `--gui` and `--tui` are
+mutually exclusive.
+
+> The GUI is the one deliberate exception to the tiny-dependency rule: it uses `express` (local
+> server) and `open` (cross-platform browser launch). The TUI remains zero-dependency.
 
 ---
 

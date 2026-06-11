@@ -45,10 +45,13 @@
     "prepublishOnly": "npm run clean && npm run build"
   },
   "dependencies": {
+    "express": "^5.2.1",
+    "open": "^11.0.0",
     "yaml": "^2.6.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@types/express": "^5.0.6",
     "@types/node": "^22.7.0",
     "@typescript-eslint/eslint-plugin": "^8.8.0",
     "@typescript-eslint/parser": "^8.8.0",

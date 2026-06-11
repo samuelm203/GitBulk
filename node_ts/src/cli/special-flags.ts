@@ -21,7 +21,7 @@ export function fishHelp(useColor: boolean): string {
     '',
     b('  COMMAND                  KEY OPTIONS                                  WHAT IT DOES'),
     '  gitbulk                  -c/--config, -m/--mode, --dry-run, --tui,    Run the bulk flow (per-RU git + PR)',
-    '                           --deep-log, --only, -l/--log-level',
+    '                           --gui, --deep-log, --only, -l/--log-level',
     '  gitbulk init             -o/--output, -f/--force                      Generate an operations config or a .mjs/.ts script',
     '  gitbulk list-operations  --json                                       List the declarative operations + parameters',
     '',
