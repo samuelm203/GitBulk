@@ -77,11 +77,33 @@ export interface RuProgressEvent {
   outcome?: RuResult['outcome'];
   /** `true`, wenn ein bereits offener PR aktualisiert (nicht neu erstellt) wurde. */
   prUpdated?: boolean;
+  /**
+   * Bei `running`: in welcher Phase steckt die RU gerade?
+   * `'git'` = Phase 3 (Repo vorbereiten + Code-Change), `'pr'` = Phase 4 (PR-API).
+   * Erlaubt UIs (z. B. der GUI-Pipeline) ein ehrliches Stufen-Umschalten.
+   */
+  stage?: 'git' | 'pr';
+  /** Beim finalen Event: Gesamt-Dauer der RU-Verarbeitung in ms. */
+  durationMs?: number;
+  /** Beim finalen Event: PR-URL, falls ein PR erstellt/aktualisiert wurde. */
+  prUrl?: string;
+  /** Beim finalen Event: PR-ID, falls vorhanden. */
+  prId?: string | number;
+  /** Beim finalen Event: Fehlertext (`phase4.error` bzw. `phase3.fatalError`). */
+  error?: string;
+  /** Beim finalen Event: erste Phase-3-Note (z. B. "No Change after [Change_Code]"). */
+  note?: string;
   /** Index der RU in der Gesamtliste (0-basiert) — für "3/10"-Anzeigen. */
   index: number;
   /** Gesamtanzahl RUs. */
   total: number;
 }
+
+/** Optionale Zusatzfelder für ein Progress-Event (nur gesetzte werden übernommen). */
+type RuProgressExtra = Pick<
+  RuProgressEvent,
+  'outcome' | 'prUpdated' | 'stage' | 'durationMs' | 'prUrl' | 'prId' | 'error' | 'note'
+>;
 
 /**
  * Optionen für den Runner.
@@ -154,16 +176,18 @@ async function processRu(
   const startedAt = Date.now();
 
   // Sicherer Event-Emitter: ein werfender Callback darf den Lauf nicht crashen.
-  const emit = (
-    status: RuProgressStatus,
-    outcome?: RuResult['outcome'],
-    prUpdated?: boolean,
-  ): void => {
+  const emit = (status: RuProgressStatus, extra: RuProgressExtra = {}): void => {
     if (!ctx.onProgress) return;
     // Felder nur ins Event aufnehmen, wenn gesetzt (exactOptionalPropertyTypes).
     const event: RuProgressEvent = { ru, status, index: ctx.index, total: ctx.total };
-    if (outcome !== undefined) event.outcome = outcome;
-    if (prUpdated === true) event.prUpdated = true;
+    if (extra.outcome !== undefined) event.outcome = extra.outcome;
+    if (extra.prUpdated === true) event.prUpdated = true;
+    if (extra.stage !== undefined) event.stage = extra.stage;
+    if (extra.durationMs !== undefined) event.durationMs = extra.durationMs;
+    if (extra.prUrl !== undefined) event.prUrl = extra.prUrl;
+    if (extra.prId !== undefined) event.prId = extra.prId;
+    if (extra.error !== undefined) event.error = extra.error;
+    if (extra.note !== undefined) event.note = extra.note;
     try {
       ctx.onProgress(event);
     } catch {
@@ -182,7 +206,7 @@ async function processRu(
       cleanupOk: true,
     };
     const phase4: Phase4Result = { ru, apiCalled: false, success: false, notes: [] };
-    emit('skipped', 'not-processed');
+    emit('skipped', { outcome: 'not-processed' });
     return {
       ru,
       phase3,
@@ -192,13 +216,15 @@ async function processRu(
     };
   }
 
-  emit('running');
+  emit('running', { stage: 'git' });
   ruLogger.info(`Starting processing`);
 
   // Phase 3
   const phase3 = await runPhase3(ru, config);
 
-  // Phase 4 (auch bei 'empty' aufrufen — die Phase loggt selbst korrekt)
+  // Phase 4 (auch bei 'empty' aufrufen — die Phase loggt selbst korrekt).
+  // Stage-Wechsel melden, damit UIs (GUI-Pipeline) ehrlich umschalten können.
+  emit('running', { stage: 'pr' });
   const phase4 = await runPhase4(phase3, config, adapter);
 
   const result: RuResult = {
@@ -209,7 +235,18 @@ async function processRu(
     durationMs: Date.now() - startedAt,
   };
 
-  emit(outcomeToProgressStatus(result.outcome), result.outcome, phase4.prUpdated);
+  // Finales Event trägt die Detail-Daten (Result liegt jetzt vor).
+  const finalExtra: RuProgressExtra = {
+    outcome: result.outcome,
+    durationMs: result.durationMs,
+  };
+  if (phase4.prUpdated === true) finalExtra.prUpdated = true;
+  if (phase4.prUrl !== undefined) finalExtra.prUrl = phase4.prUrl;
+  if (phase4.prId !== undefined) finalExtra.prId = phase4.prId;
+  const errText = phase4.error ?? phase3.fatalError;
+  if (errText !== undefined) finalExtra.error = errText;
+  if (phase3.notes[0] !== undefined) finalExtra.note = phase3.notes[0];
+  emit(outcomeToProgressStatus(result.outcome), finalExtra);
   ruLogger.info(`Done in ${result.durationMs}ms — outcome: ${result.outcome}`);
   return result;
 }

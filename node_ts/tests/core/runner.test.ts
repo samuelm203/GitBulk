@@ -255,6 +255,41 @@ describe('runBulk', () => {
     }
   });
 
+  it('emits stage events (git then pr) and detail fields on the final event', async () => {
+    const ws = createWorkspace();
+    try {
+      setupRu(ws, 'r1');
+      const script = writeShellScript(ws, 'echo "x" > new.txt');
+
+      const events: Array<{
+        status: string;
+        stage?: string | undefined;
+        durationMs?: number | undefined;
+        prUrl?: string | undefined;
+      }> = [];
+      await runBulk(makeConfig(ws, script, { rus: ['r1'] }), {
+        prAdapter: new MockAdapter(),
+        onProgress: (e) => {
+          events.push({ status: e.status, stage: e.stage, durationMs: e.durationMs, prUrl: e.prUrl });
+        },
+      });
+
+      // Stage-Reihenfolge: erst 'git' (Phase 3), dann 'pr' (Phase 4).
+      const stages = events.filter((e) => e.status === 'running').map((e) => e.stage);
+      assert.deepEqual(stages, ['git', 'pr']);
+
+      // Finales Event trägt die Details (Dauer immer; PR-URL bei Erfolg).
+      const final = events[events.length - 1]!;
+      assert.notEqual(final.status, 'running');
+      assert.equal(typeof final.durationMs, 'number');
+      if (final.status === 'done') {
+        assert.equal(typeof final.prUrl, 'string');
+      }
+    } finally {
+      cleanup(ws);
+    }
+  });
+
   it('onProgress reports correct index and total', async () => {
     const ws = createWorkspace();
     try {
