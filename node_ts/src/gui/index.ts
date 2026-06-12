@@ -13,7 +13,7 @@
 
 import process from 'node:process';
 
-import open from 'open';
+import open, { openApp, apps } from 'open';
 
 import { loadConfig, ConfigError } from '../config/loader.js';
 import { createPrAdapter, PrAdapterError } from '../git/pr-adapter.js';
@@ -44,7 +44,29 @@ export interface GuiOptions {
 }
 
 /**
- * Startet den GUI-Modus: Server + Browser, Lauf per Button, Live-Streaming.
+ * Öffnet die GUI als EIGENES Fenster (Chromium-App-Modus: keine Tabs, keine
+ * Adressleiste — wirkt wie eine native Anwendung). Reihenfolge: Edge (auf
+ * Windows immer vorhanden) → Chrome → Fallback Standard-Browser.
+ */
+async function openGuiWindow(url: string): Promise<void> {
+  const appArguments = [`--app=${url}`, '--window-size=1240,920'];
+  for (const candidate of [apps.edge, apps.chrome]) {
+    try {
+      await openApp(candidate, { arguments: appArguments });
+      return;
+    } catch {
+      // Kandidat nicht installiert → nächsten probieren.
+    }
+  }
+  try {
+    await open(url);
+  } catch {
+    process.stderr.write('Could not open a window automatically — open the URL manually.\n');
+  }
+}
+
+/**
+ * Startet den GUI-Modus: Server + App-Fenster, Lauf per Button, Live-Streaming.
  *
  * @returns Exit-Code (0 = ok, 1 = PR-Fehler, 2 = fatal, 3 = Setup-Fehler)
  */
@@ -156,13 +178,9 @@ export async function runGui(options: GuiOptions = {}): Promise<number> {
     return runBulk(frozenConfig, runOpts);
   };
 
-  process.stderr.write(`GitBulk GUI: ${handle.url} (127.0.0.1 only — start the run in the browser)\n`);
+  process.stderr.write(`GitBulk GUI: ${handle.url} (127.0.0.1 only — start the run in the window)\n`);
   if (options.noOpen !== true) {
-    try {
-      await open(handle.url);
-    } catch {
-      process.stderr.write('Could not open a browser automatically — open the URL manually.\n');
-    }
+    await openGuiWindow(handle.url);
   }
 
   // ── Auf Lauf-Ende ODER Abbruch warten ──────────────────────────

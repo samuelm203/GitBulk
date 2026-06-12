@@ -353,8 +353,8 @@ gitbulk [options]
                          missing fields). Default: hybrid
       --dry-run          Do not perform any write operations (push, PR API)
       --tui              Run with an interactive terminal UI showing live per-RU progress
-      --gui              Open a local browser dashboard (127.0.0.1) with a live process view;
-                         the run is started via a button in the page
+      --gui              Open the live process view in its own window (local, 127.0.0.1);
+                         the run is started via a button in the window
       --deep-log         Record a granular step-by-step log; at the end choose [D]ownload
                          (writes ./gitbulk/gitbulk-log-<ts>.log) or [P]rint. Non-TTY: file.
       --only <rus>       Only process these RUs (comma-separated subset of the configured RUs)
@@ -421,8 +421,10 @@ gitbulk --gui --config gitbulk.config.yaml            # real run, started via bu
 gitbulk --gui --config gitbulk.config.yaml --dry-run  # safe preview of the full flow
 ```
 
-GitBulk starts a small local web server (bound to **127.0.0.1 only**, random port), opens your
-default browser, and streams the run live via Server-Sent Events:
+GitBulk starts a small local web server (bound to **127.0.0.1 only**, random port) and opens the
+dashboard as **its own application window** (Chromium app mode via Edge/Chrome — no tabs, no
+address bar; falls back to the default browser if neither is installed). The run is streamed
+live via Server-Sent Events:
 
 - **Process view** modeled after the project flowchart — *Bitbucket Repo → Anpassen →
   PR erstellen* with an animated loop arrow while repositories are being processed.

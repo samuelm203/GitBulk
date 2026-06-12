@@ -50,7 +50,7 @@ describe('renderGuiPage', () => {
     assert.match(html, /github/);
     assert.match(html, /concurrency 4/);
     assert.match(html, /AKB-1234-feature\/x/);
-    assert.match(html, /Live-Log/);
+    assert.match(html, /<h2>Log<\/h2>/);
   });
 
   it('shows the DRY-RUN badge only in dry-run mode', () => {
