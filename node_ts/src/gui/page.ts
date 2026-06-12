@@ -134,7 +134,10 @@ export function renderGuiPage(model: GuiPageModel): string {
   .fbox.active { background: var(--blue-dark); outline: 2px solid var(--blue-dark); outline-offset: 1px; }
   .farrow { display: flex; justify-content: center; padding: 6px 0; }
   .lcol { position: relative; width: 50px; }
-  .lcol .lbody { position: absolute; top: 16px; bottom: 8px; left: 0; width: 100%; }
+  /* WICHTIG: height explizit setzen — ein SVG ist ein replaced element mit
+     intrinsischem Seitenverhältnis; bei top+bottom mit height:auto gewinnt
+     sonst die intrinsische Höhe aus der viewBox und der Pfeil überläuft. */
+  .lcol .lbody { position: absolute; top: 16px; left: 0; width: 100%; height: calc(100% - 24px); }
   .lcol .lbody path { fill: none; stroke: var(--blue); stroke-width: 7; }
   .lcol .lhead { position: absolute; top: 6px; left: 0; }
   .lcol .lhead polygon { fill: var(--blue); stroke: #16374a; stroke-width: 1; }
