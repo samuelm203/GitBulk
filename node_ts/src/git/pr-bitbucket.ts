@@ -92,14 +92,25 @@ export class BitbucketPrAdapter implements PullRequestAdapter {
   }
 
   /**
-   * Erstellt einen Pull Request.
+   * Erstellt einen Pull Request — oder meldet einen bereits offenen als „updated".
    *
    * Phase 4 des Flowcharts: `API: Create a PR for this RU`.
-   * Bei HTTP 200/201 → Erfolg. Bei sonstigen Codes → Fehler-Result.
+   *
+   * WICHTIG (Re-Run): Wir prüfen ZUERST, ob für den Source-Branch bereits ein
+   * offener PR existiert. Bitbucket meldet Duplikate uneinheitlich (Cloud gibt
+   * je nach Fall einen 2xx mit dem bestehenden PR oder einen 4xx mit wechselndem
+   * Wortlaut zurück) — ein vorgelagerter Lookup ist daher die einzige robuste
+   * Art, „erstellt" von „aktualisiert" zu unterscheiden, und verhindert
+   * nebenbei Duplikat-PRs beim zweiten Lauf.
    */
   public async createPullRequest(input: CreatePrInput): Promise<CreatePrResult> {
-    const { url, body } = this.buildRequest(input);
+    const existing = await this.findOpenPr(input);
+    if (existing) {
+      this.logger.debug(`Open PR already exists for ${input.ru} (#${existing.id}) → update`);
+      return { ok: true, id: existing.id, url: existing.url, statusCode: 200, updated: true };
+    }
 
+    const { url, body } = this.buildRequest(input);
     this.logger.debug(`POST ${url} (source=${input.sourceBranch} → target=${input.targetBranch})`);
 
     let response: Response;
@@ -128,18 +139,13 @@ export class BitbucketPrAdapter implements PullRequestAdapter {
       return this.parseSuccess(response.status, rawBody, input);
     }
 
-    // Re-Run-Fall: Bitbucket lehnt einen zweiten PR für denselben
-    // Source→Target ab (Cloud: 400 „...already exists..."; Server: 409 „Only
-    // one pull request may be open..."). Statt zu scheitern, schlagen wir den
-    // offenen PR nach und melden ihn als „updated".
-    if (
-      (response.status === 400 || response.status === 409) &&
-      /already exists|only one pull request/i.test(rawBody)
-    ) {
-      const existing = await this.findOpenPr(input);
-      if (existing) {
-        this.logger.debug(`PR already exists for ${input.ru} (#${existing.id}) → treating as update`);
-        return { ok: true, id: existing.id, url: existing.url, statusCode: 200, updated: true };
+    // Race-Absicherung: Falls zwischen Lookup und POST doch ein PR entstanden
+    // ist (oder Bitbucket das Duplikat erst hier ablehnt), erneut nachschlagen.
+    if (response.status === 400 || response.status === 409) {
+      const racePr = await this.findOpenPr(input);
+      if (racePr) {
+        this.logger.debug(`PR appeared concurrently for ${input.ru} (#${racePr.id}) → update`);
+        return { ok: true, id: racePr.id, url: racePr.url, statusCode: 200, updated: true };
       }
     }
 
