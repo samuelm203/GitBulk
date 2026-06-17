@@ -1,0 +1,20 @@
+@import "tailwindcss";
+
+/* Design-Tokens: genau EIN Markenakzent (CSS-Versicherung-Blau) plus die
+   neutrale zinc-Skala von Tailwind. Bewusst keine weiteren Farben. */
+@theme {
+  --color-brand: #00a4e0;
+  --color-brand-dark: #0083b4;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background-color: #fafafa; /* zinc-50 — ruhige, neutrale Flaeche */
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
