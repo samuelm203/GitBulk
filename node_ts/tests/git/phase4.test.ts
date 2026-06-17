@@ -185,4 +185,17 @@ describe('Phase 4 - Reviewer + target branch routing', () => {
     assert.equal(adapter.calls[0]!.targetBranch, 'develop');
     assert.deepEqual([...adapter.calls[0]!.reviewers], ['r1']);
   });
+
+  it('passes target branch and reviewers from github config (not sourceBranch)', async () => {
+    // Regression: github fiel früher in den default-Zweig → targetBranch wurde
+    // fälschlich sourceBranch ('master') und reviewers wurden verworfen.
+    const cfg = makeConfig({
+      prPlatform: 'github',
+      sourceBranch: 'master',
+      github: { owner: 'org', targetBranch: 'main', reviewers: ['octocat', 'hubot'] },
+    });
+    await runPhase4(makePhase3(), cfg, adapter);
+    assert.equal(adapter.calls[0]!.targetBranch, 'main');
+    assert.deepEqual([...adapter.calls[0]!.reviewers], ['octocat', 'hubot']);
+  });
 });
