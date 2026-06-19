@@ -27,11 +27,11 @@ function stepStates(repo: RepoState): Record<StepKey, StepState> {
 }
 
 const CHIP: Record<StepState, string> = {
-  idle: 'border-zinc-200 text-zinc-300',
+  idle: 'border-line text-ink-faint',
   active: 'border-brand text-brand',
-  done: 'border-emerald-200 text-emerald-600',
-  failed: 'border-red-200 text-red-600',
-  skipped: 'border-amber-200 text-amber-600',
+  done: 'border-ok/40 text-ok',
+  failed: 'border-err/40 text-err',
+  skipped: 'border-warn/40 text-warn',
 };
 
 function StepIcon({ state }: { state: StepState }) {
@@ -61,10 +61,10 @@ export function MiniPipeline({ repo }: { repo: RepoState }) {
             className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px] font-medium ${CHIP[states[step.key]]}`}
           >
             <StepIcon state={states[step.key]} />
-            <span className="text-zinc-600">{step.label}</span>
+            <span className="text-ink-muted">{step.label}</span>
           </span>
           {index < STEPS.length - 1 ? (
-            <span className="text-zinc-300" aria-hidden="true">
+            <span className="text-ink-faint" aria-hidden="true">
               ›
             </span>
           ) : null}

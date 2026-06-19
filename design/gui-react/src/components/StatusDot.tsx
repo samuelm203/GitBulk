@@ -12,8 +12,8 @@ export function StatusDot({ phase, hasFailures }: StatusDotProps) {
       ? 'bg-brand motion-safe:animate-pulse'
       : phase === 'done'
         ? hasFailures
-          ? 'bg-red-500'
-          : 'bg-emerald-500'
-        : 'bg-zinc-300';
+          ? 'bg-err'
+          : 'bg-ok'
+        : 'bg-ink-faint';
   return <span className={`inline-block h-2 w-2 rounded-full ${tone}`} aria-hidden="true" />;
 }

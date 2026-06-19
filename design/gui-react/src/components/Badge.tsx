@@ -6,8 +6,8 @@ interface BadgeProps {
 }
 
 const TONES: Record<NonNullable<BadgeProps['tone']>, string> = {
-  default: 'border-zinc-200 bg-white text-zinc-500',
-  warn: 'border-amber-200 bg-amber-50 text-amber-700',
+  default: 'border-line bg-surface text-ink-muted',
+  warn: 'border-warn/40 bg-warn/10 text-warn',
 };
 
 /** Ruhiger Kontext-Chip im Header (Plattform, Concurrency, Ticket …). */

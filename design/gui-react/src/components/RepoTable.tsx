@@ -1,8 +1,16 @@
-import { ExternalLink } from 'lucide-react';
+import { ExternalLink, Search, X } from 'lucide-react';
 
 import type { RepoState, RuStatus } from '../types';
+import { matchesFilter, type StatusFilter } from '../lib/filter';
 import { MiniPipeline } from './MiniPipeline';
 import { formatDuration } from '../lib/format';
+
+interface RepoTableProps {
+  repos: readonly RepoState[];
+  statusFilter: StatusFilter;
+  query: string;
+  onQueryChange: (query: string) => void;
+}
 
 const STATUS_TEXT: Record<RuStatus, string> = {
   pending: 'Wartet',
@@ -13,11 +21,11 @@ const STATUS_TEXT: Record<RuStatus, string> = {
 };
 
 const STATUS_TONE: Record<RuStatus, string> = {
-  pending: 'text-zinc-400',
+  pending: 'text-ink-faint',
   running: 'text-brand',
-  done: 'text-emerald-600',
-  failed: 'text-red-600',
-  skipped: 'text-amber-600',
+  done: 'text-ok',
+  failed: 'text-err',
+  skipped: 'text-warn',
 };
 
 function statusLabel(repo: RepoState): string {
@@ -28,10 +36,10 @@ function statusLabel(repo: RepoState): string {
 
 function RepoDetail({ repo }: { repo: RepoState }) {
   if (repo.status === 'failed' && repo.error !== null) {
-    return <span className="text-red-600">{repo.error}</span>;
+    return <span className="text-err">{repo.error}</span>;
   }
   if (repo.status === 'skipped' && repo.note !== null) {
-    return <span className="text-zinc-500">{repo.note}</span>;
+    return <span className="text-ink-muted">{repo.note}</span>;
   }
   if (repo.status === 'done' && repo.prUrl !== null) {
     return (
@@ -46,21 +54,21 @@ function RepoDetail({ repo }: { repo: RepoState }) {
           <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
         </a>
         {repo.prUpdated ? (
-          <span className="rounded border border-zinc-200 px-1.5 text-[11px] font-medium text-zinc-500">
+          <span className="rounded border border-line px-1.5 text-[11px] font-medium text-ink-muted">
             updated
           </span>
         ) : null}
       </span>
     );
   }
-  return <span className="text-zinc-300">—</span>;
+  return <span className="text-ink-faint">—</span>;
 }
 
 function RepoRow({ repo }: { repo: RepoState }) {
   return (
-    <tr className="border-t border-zinc-100 transition-colors hover:bg-zinc-50">
+    <tr className="border-t border-line-soft transition-colors hover:bg-surface-2">
       <td className="py-3 pl-4 pr-3 align-middle sm:pl-6">
-        <span className="font-medium text-zinc-800">{repo.name}</span>
+        <span className="font-medium text-ink">{repo.name}</span>
       </td>
       <td className="px-3 py-3 align-middle">
         <MiniPipeline repo={repo} />
@@ -68,7 +76,7 @@ function RepoRow({ repo }: { repo: RepoState }) {
       <td className={`px-3 py-3 align-middle text-sm font-medium ${STATUS_TONE[repo.status]}`}>
         {statusLabel(repo)}
       </td>
-      <td className="hidden px-3 py-3 align-middle text-sm tabular-nums text-zinc-500 md:table-cell">
+      <td className="hidden px-3 py-3 align-middle text-sm tabular-nums text-ink-muted md:table-cell">
         {repo.durationMs !== null ? formatDuration(repo.durationMs) : '—'}
       </td>
       <td className="px-3 py-3 pr-4 align-middle text-sm sm:pr-6">
@@ -78,23 +86,40 @@ function RepoRow({ repo }: { repo: RepoState }) {
   );
 }
 
-/** Datentabelle aller RUs mit Mini-Pipeline, Status, Dauer und PR-Link. */
-export function RepoTable({ repos }: { repos: readonly RepoState[] }) {
+/** Datentabelle aller RUs — mit Live-Suche und Status-Filter. */
+export function RepoTable({ repos, statusFilter, query, onQueryChange }: RepoTableProps) {
+  const visible = repos.filter((repo) => matchesFilter(repo, statusFilter, query));
+  const isFiltered = statusFilter !== 'all' || query.trim() !== '';
+
   return (
-    <section
-      className="overflow-hidden rounded-lg border border-zinc-200 bg-white"
-      aria-labelledby="repos-heading"
-    >
-      <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3 sm:px-6">
-        <h2 id="repos-heading" className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
+    <section className="overflow-hidden rounded-lg border border-line bg-surface" aria-labelledby="repos-heading">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-line px-4 py-3 sm:px-6">
+        <h2 id="repos-heading" className="text-[11px] font-semibold uppercase tracking-wider text-ink-faint">
           Repositories
         </h2>
-        <span className="text-[11px] font-medium tabular-nums text-zinc-400">{repos.length}</span>
+        <span className="text-[11px] font-medium tabular-nums text-ink-faint">
+          {isFiltered ? `${visible.length} / ${repos.length}` : repos.length}
+        </span>
+        <div className="relative ml-auto">
+          <Search
+            className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-faint"
+            aria-hidden="true"
+          />
+          <input
+            id="ru-search"
+            type="search"
+            value={query}
+            onChange={(event) => onQueryChange(event.target.value)}
+            placeholder="Suchen…  (/)"
+            aria-label="Repositories suchen"
+            className="w-40 rounded-md border border-line bg-surface-2 py-1.5 pl-8 pr-2 text-sm text-ink placeholder:text-ink-faint focus-visible:border-brand focus-visible:outline-none sm:w-52"
+          />
+        </div>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[34rem] border-collapse text-left">
           <thead>
-            <tr className="text-[11px] uppercase tracking-wider text-zinc-400">
+            <tr className="text-[11px] uppercase tracking-wider text-ink-faint">
               <th scope="col" className="py-2 pl-4 pr-3 font-medium sm:pl-6">
                 Repository
               </th>
@@ -113,9 +138,18 @@ export function RepoTable({ repos }: { repos: readonly RepoState[] }) {
             </tr>
           </thead>
           <tbody>
-            {repos.map((repo) => (
-              <RepoRow key={repo.name} repo={repo} />
-            ))}
+            {visible.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="px-4 py-10 text-center sm:px-6">
+                  <p className="flex items-center justify-center gap-2 text-sm text-ink-faint">
+                    <X className="h-4 w-4" aria-hidden="true" />
+                    Keine Repositories für diesen Filter.
+                  </p>
+                </td>
+              </tr>
+            ) : (
+              visible.map((repo) => <RepoRow key={repo.name} repo={repo} />)
+            )}
           </tbody>
         </table>
       </div>

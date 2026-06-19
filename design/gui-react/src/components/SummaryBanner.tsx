@@ -15,18 +15,18 @@ export function SummaryBanner({ counts, totalDurationMs }: SummaryBannerProps) {
     <div
       role="status"
       className={`flex items-start gap-3 rounded-lg border border-l-4 px-4 py-3 ${
-        hasFailures ? 'border-red-100 border-l-red-500 bg-red-50' : 'border-emerald-100 border-l-emerald-500 bg-emerald-50'
+        hasFailures ? 'border-err/30 border-l-err bg-err/10' : 'border-ok/30 border-l-ok bg-ok/10'
       }`}
     >
       {hasFailures ? (
-        <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-red-600" aria-hidden="true" />
+        <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-err" aria-hidden="true" />
       ) : (
-        <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" aria-hidden="true" />
+        <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-ok" aria-hidden="true" />
       )}
-      <p className="text-sm text-zinc-700">
-        <span className="font-medium text-zinc-900">Lauf beendet</span> · {counts.created} neu,{' '}
+      <p className="text-sm text-ink-muted">
+        <span className="font-medium text-ink">Lauf beendet</span> · {counts.created} neu,{' '}
         {counts.updated} aktualisiert, {counts.skipped} übersprungen, {counts.failed} fehlgeschlagen
-        <span className="text-zinc-500"> · {formatClock(totalDurationMs)}</span>
+        <span className="text-ink-faint"> · {formatClock(totalDurationMs)}</span>
       </p>
     </div>
   );

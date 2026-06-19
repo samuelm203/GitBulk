@@ -4,10 +4,10 @@ import { ChevronDown, Terminal } from 'lucide-react';
 import type { LogLevel, LogLine } from '../types';
 
 const LEVEL_TONE: Record<LogLevel, string> = {
-  debug: 'text-zinc-400',
-  info: 'text-zinc-600',
-  warn: 'text-amber-600',
-  error: 'text-red-600',
+  debug: 'text-ink-faint',
+  info: 'text-ink-muted',
+  warn: 'text-warn',
+  error: 'text-err',
 };
 
 /** Einklappbares Live-Protokoll; Auto-Scroll nur, wenn man unten ist. */
@@ -28,20 +28,20 @@ export function LogPanel({ lines }: { lines: readonly LogLine[] }) {
   };
 
   return (
-    <section className="overflow-hidden rounded-lg border border-zinc-200 bg-white" aria-labelledby="log-heading">
+    <section className="overflow-hidden rounded-lg border border-line bg-surface" aria-labelledby="log-heading">
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
-        className="flex w-full items-center gap-2 border-b border-zinc-200 px-4 py-3 text-left sm:px-6"
+        className="flex w-full items-center gap-2 border-b border-line px-4 py-3 text-left sm:px-6"
         aria-expanded={open}
       >
-        <Terminal className="h-3.5 w-3.5 text-zinc-400" aria-hidden="true" />
-        <h2 id="log-heading" className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
+        <Terminal className="h-3.5 w-3.5 text-ink-faint" aria-hidden="true" />
+        <h2 id="log-heading" className="text-[11px] font-semibold uppercase tracking-wider text-ink-faint">
           Protokoll
         </h2>
-        <span className="text-[11px] tabular-nums text-zinc-400">{lines.length}</span>
+        <span className="text-[11px] tabular-nums text-ink-faint">{lines.length}</span>
         <ChevronDown
-          className={`ml-auto h-4 w-4 text-zinc-400 transition-transform ${open ? '' : '-rotate-90'}`}
+          className={`ml-auto h-4 w-4 text-ink-faint transition-transform ${open ? '' : '-rotate-90'}`}
           aria-hidden="true"
         />
       </button>
@@ -53,11 +53,11 @@ export function LogPanel({ lines }: { lines: readonly LogLine[] }) {
           aria-live="polite"
         >
           {lines.length === 0 ? (
-            <p className="text-zinc-400">Noch keine Ausgaben — Lauf starten.</p>
+            <p className="text-ink-faint">Noch keine Ausgaben — Lauf starten.</p>
           ) : (
             lines.map((line) => (
               <div key={line.id} className={LEVEL_TONE[line.level]}>
-                <span className="select-none text-zinc-300">{line.level.toUpperCase().padEnd(6)}</span>
+                <span className="select-none text-ink-faint">{line.level.toUpperCase().padEnd(6)}</span>
                 {line.text}
               </div>
             ))

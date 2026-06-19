@@ -35,9 +35,9 @@ function activeStages(repos: readonly RepoState[]): Record<RuStage, boolean> {
 export function ProcessFlow({ repos, active }: ProcessFlowProps) {
   const stages = activeStages(repos);
   return (
-    <section className="rounded-lg border border-zinc-200 bg-white" aria-labelledby="flow-heading">
-      <div className="border-b border-zinc-200 px-4 py-3 sm:px-5">
-        <h2 id="flow-heading" className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
+    <section className="rounded-lg border border-line bg-surface" aria-labelledby="flow-heading">
+      <div className="border-b border-line px-4 py-3 sm:px-5">
+        <h2 id="flow-heading" className="text-[11px] font-semibold uppercase tracking-wider text-ink-faint">
           Prozess
         </h2>
       </div>
@@ -50,33 +50,31 @@ export function ProcessFlow({ repos, active }: ProcessFlowProps) {
               <li key={step.key}>
                 <div
                   className={`flex items-center gap-3 rounded-lg border px-3 py-3 transition-colors ${
-                    isActive ? 'border-brand bg-brand/5' : 'border-zinc-200 bg-white'
+                    isActive ? 'border-brand bg-brand/5' : 'border-line bg-surface'
                   }`}
                 >
                   <span
                     className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-md transition-colors ${
-                      isActive ? 'bg-brand text-white' : 'bg-zinc-100 text-zinc-500'
+                      isActive ? 'bg-brand text-white' : 'bg-line-soft text-ink-muted'
                     }`}
                   >
                     <Icon className="h-[18px] w-[18px]" aria-hidden="true" />
                   </span>
                   <span className="min-w-0">
-                    <span
-                      className={`block text-sm font-medium ${isActive ? 'text-brand-dark' : 'text-zinc-800'}`}
-                    >
+                    <span className={`block text-sm font-medium ${isActive ? 'text-brand' : 'text-ink'}`}>
                       {step.label}
                     </span>
-                    <span className="block truncate text-xs text-zinc-400">{step.sub}</span>
+                    <span className="block truncate text-xs text-ink-faint">{step.sub}</span>
                   </span>
                 </div>
                 {index < STEPS.length - 1 ? (
-                  <div className="ml-[2.05rem] h-2 w-px bg-zinc-200" aria-hidden="true" />
+                  <div className="ml-[2.05rem] h-2 w-px bg-line" aria-hidden="true" />
                 ) : null}
               </li>
             );
           })}
         </ol>
-        <p className="mt-3 flex items-center gap-1.5 pl-1 text-xs text-zinc-400">
+        <p className="mt-3 flex items-center gap-1.5 pl-1 text-xs text-ink-faint">
           <RotateCcw className={`h-3.5 w-3.5 ${active ? 'text-brand' : ''}`} aria-hidden="true" />
           pro Repository wiederholt
         </p>
