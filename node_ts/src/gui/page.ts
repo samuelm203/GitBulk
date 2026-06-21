@@ -64,11 +64,22 @@ export function renderGuiPage(model: GuiPageModel): string {
     dryRun: model.dryRun,
   }).replace(/</g, '\\u003c');
 
+  // Inline-Favicon (GB-Monogramm in Mockup-Blau) — gibt dem App-Fenster ein
+  // eigenes Icon in Taskleiste/Titel, statt des generischen Browser-Symbols.
+  // encodeURIComponent macht die Data-URI über alle Browser hinweg robust.
+  const faviconSvg =
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">` +
+    `<rect width="32" height="32" rx="6" fill="#29abe2"/>` +
+    `<text x="16" y="22" font-family="Segoe UI,sans-serif" font-size="15" ` +
+    `font-weight="700" text-anchor="middle" fill="#ffffff">GB</text></svg>`;
+  const favicon = `data:image/svg+xml,${encodeURIComponent(faviconSvg)}`;
+
   return `<!doctype html>
 <html lang="de">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="${favicon}">
 <title>GitBulk</title>
 <style>
   :root {
@@ -104,6 +115,13 @@ export function renderGuiPage(model: GuiPageModel): string {
   .badge.dry { color: #7a5b00; background: #fff7df; border-color: #e3cf8e; }
   .spacer { flex: 1; }
   #runState { font-size: 12.5px; color: var(--muted); margin-right: 4px; }
+  /* Status-Punkt: neutral (bereit) → blau pulsierend (läuft) → grün/rot (Ende). */
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+         background: var(--line); margin-right: 6px; vertical-align: middle; }
+  .dot.run { background: var(--blue); animation: pulse 1.3s ease-in-out infinite; }
+  .dot.ok { background: var(--ok); }
+  .dot.err { background: var(--err); }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
   #startBtn {
     font: 600 13.5px "Segoe UI", system-ui, sans-serif;
     color: #fff; background: var(--blue-dark);
@@ -131,7 +149,12 @@ export function renderGuiPage(model: GuiPageModel): string {
     background: var(--blue); color: #fff; font-weight: 600; font-size: 14.5px;
     text-align: center; padding: 13px 10px; border: 1px solid #16374a;
   }
-  .fbox.active { background: var(--blue-dark); outline: 2px solid var(--blue-dark); outline-offset: 1px; }
+  /* Aktive Stufe: dezenter, atmender Blau-Schimmer (kein greller Effekt). */
+  .fbox.active { background: var(--blue-dark); animation: boxpulse 1.6s ease-in-out infinite; }
+  @keyframes boxpulse {
+    0%, 100% { box-shadow: 0 0 0 3px rgba(41, 171, 226, .30); }
+    50%      { box-shadow: 0 0 0 7px rgba(41, 171, 226, .10); }
+  }
   .farrow { display: flex; justify-content: center; padding: 6px 0; }
   .lcol { position: relative; width: 50px; }
   /* WICHTIG: height explizit setzen — ein SVG ist ein replaced element mit
@@ -151,6 +174,7 @@ export function renderGuiPage(model: GuiPageModel): string {
   .counts { margin-top: 12px; font-size: 13px; display: flex; flex-wrap: wrap; gap: 4px 16px; }
   .counts b { font-weight: 600; }
   .counts .ok { color: var(--ok); } .counts .err { color: var(--err); } .counts .warn { color: var(--warn); }
+  .counts .upd { color: var(--blue-dark); }
 
   /* ── RU-Tabelle ─────────────────────────────────────────────── */
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -204,6 +228,14 @@ export function renderGuiPage(model: GuiPageModel): string {
   }
   #doneBanner.failed { border-color: #e3b9b6; background: #fbeeed; color: var(--err); }
   .foot { text-align: center; color: #9aa4b0; font-size: 11px; padding: 0 0 12px; }
+
+  /* Bewegungsreduktion respektieren (Barrierefreiheit): alle Animationen aus. */
+  @media (prefers-reduced-motion: reduce) {
+    .lcol.running .lbody path { animation: none; }
+    .fbox.active { animation: none; box-shadow: 0 0 0 3px rgba(41, 171, 226, .30); }
+    .dot.run { animation: none; }
+    .progress > div { transition: none; }
+  }
 </style>
 </head>
 <body>
@@ -214,6 +246,7 @@ export function renderGuiPage(model: GuiPageModel): string {
     <span class="badge">${escapeHtml(model.ticket)}-${escapeHtml(model.branch)}</span>
     ${model.dryRun ? '<span class="badge dry">DRY-RUN</span>' : ''}
     <div class="spacer"></div>
+    <span id="runDot" class="dot"></span>
     <span id="runState">bereit</span>
     <button id="startBtn">Run starten</button>
   </header>
@@ -242,8 +275,8 @@ export function renderGuiPage(model: GuiPageModel): string {
           <div class="progress"><div id="bar"></div></div>
           <div class="meta-row"><span id="progressText">0 / ${model.rus.length} abgeschlossen</span><span id="clock">00:00</span></div>
           <div class="counts">
-            <span class="ok"><b id="nCreated">0</b> PRs erstellt</span>
-            <span><b id="nUpdated">0</b> aktualisiert</span>
+            <span class="ok"><b id="nCreated">0</b> neu erstellt</span>
+            <span class="upd"><b id="nUpdated">0</b> aktualisiert</span>
             <span class="err"><b id="nFailed">0</b> fehlgeschlagen</span>
             <span class="warn"><b id="nSkipped">0</b> übersprungen</span>
           </div>
@@ -287,6 +320,7 @@ ${ruRows}
     var $ = function (id) { return document.getElementById(id); };
     var startBtn = $('startBtn');
     var runState = $('runState');
+    var runDot = $('runDot');
     var logEl = $('log');
 
     // ── Hero-Aggregation: aktive Stufe = höchste Stage laufender RUs ──
@@ -343,8 +377,10 @@ ${ruRows}
       row.dataset.status = ev.status;
 
       if (ev.status === 'done') {
-        counts.created++;
+        // Neu erstellt und aktualisiert sauber trennen (überschneidungsfrei) —
+        // ein aktualisierter PR zählt NICHT zusätzlich als "neu erstellt".
         if (ev.prUpdated) counts.updated++;
+        else counts.created++;
         stateEl.textContent = ev.prUpdated ? 'PR aktualisiert' : 'PR erstellt';
         setSteps(row, { repo: 'done', change: 'done', pr: 'done' });
         detail.textContent = '';
@@ -388,6 +424,9 @@ ${ruRows}
 
     // ── Log-Panel ──────────────────────────────────────────────
     function addLog(data) {
+      // Nur automatisch nachscrollen, wenn der Nutzer ohnehin unten ist —
+      // sonst reißt es ihn beim Zurückscrollen ständig ans Ende.
+      var atBottom = logEl.scrollHeight - logEl.scrollTop - logEl.clientHeight < 40;
       var span = document.createElement('span');
       var line = data.line || '';
       if (line.indexOf('[ERROR]') !== -1) span.className = 'l-error';
@@ -395,7 +434,7 @@ ${ruRows}
       else if (line.indexOf('[DEBUG]') !== -1) span.className = 'l-debug';
       span.textContent = line + '\\n';
       logEl.appendChild(span);
-      logEl.scrollTop = logEl.scrollHeight;
+      if (atBottom) logEl.scrollTop = logEl.scrollHeight;
     }
 
     // ── Uhr ────────────────────────────────────────────────────
@@ -415,6 +454,7 @@ ${ruRows}
       startedAt = Date.now();
       clockTimer = setInterval(tick, 500);
       runState.textContent = boot.dryRun ? 'läuft (dry-run)…' : 'läuft…';
+      runDot.className = 'dot run';
       startBtn.disabled = true;
     });
     es.addEventListener('summary', function (e) {
@@ -423,17 +463,20 @@ ${ruRows}
       refreshHero();
       var sum = JSON.parse(e.data);
       var banner = $('doneBanner');
-      var failedTotal = (sum.totals.prsFailed || 0) + (sum.totals.fatalErrors || 0);
+      // Aus den Live-Zählern, damit der Banner exakt zu den oben gezeigten
+      // Werten passt (Backend zählt aktualisierte PRs unter "created" mit).
       banner.style.display = 'block';
-      if (failedTotal > 0) banner.classList.add('failed');
-      banner.textContent = 'Run beendet — ' + (sum.totals.prsCreated || 0) + ' PRs erstellt, '
-        + (sum.totals.prsSkipped || 0) + ' übersprungen, ' + failedTotal + ' fehlgeschlagen ('
+      if (counts.failed > 0) banner.classList.add('failed');
+      banner.textContent = 'Run beendet — ' + counts.created + ' neu erstellt, '
+        + counts.updated + ' aktualisiert, ' + counts.skipped + ' übersprungen, '
+        + counts.failed + ' fehlgeschlagen ('
         + Math.round((sum.totalDurationMs || 0) / 1000) + ' s). Dieses Fenster behält den Endstand.';
       runState.textContent = 'beendet';
+      runDot.className = counts.failed > 0 ? 'dot err' : 'dot ok';
       es.close();
     });
     es.onerror = function () {
-      if (!runDone) runState.textContent = 'Verbindung getrennt';
+      if (!runDone) { runState.textContent = 'Verbindung getrennt'; runDot.className = 'dot err'; }
     };
 
     // ── Start ──────────────────────────────────────────────────

@@ -179,6 +179,8 @@ function getTargetBranch(config: GitBulkConfig): string {
   switch (config.prPlatform) {
     case 'bitbucket':
       return config.bitbucket?.targetBranch ?? config.sourceBranch;
+    case 'github':
+      return config.github?.targetBranch ?? config.sourceBranch;
     case 'azure-devops':
       return config.azureDevOps?.targetBranch ?? config.sourceBranch;
     default:
@@ -193,6 +195,8 @@ function getReviewers(config: GitBulkConfig): readonly string[] {
   switch (config.prPlatform) {
     case 'bitbucket':
       return config.bitbucket?.reviewers ?? [];
+    case 'github':
+      return config.github?.reviewers ?? [];
     case 'azure-devops':
       return config.azureDevOps?.reviewers ?? [];
     default:

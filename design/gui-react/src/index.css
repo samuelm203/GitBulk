@@ -1,0 +1,59 @@
+@import "tailwindcss";
+
+/* Dark Mode per Klasse auf <html> (nicht nur Media) — erlaubt manuellen Toggle. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ── Design-Tokens ───────────────────────────────────────────────────────
+   Genau EIN Markenakzent (CSS-Blau) plus semantische Flaechen/Text/Linien-
+   und Status-Tokens. Dark Mode wechselt NUR die Token-Werte — die Komponenten
+   nutzen `bg-surface`/`text-ink`/`text-ok` und brauchen keine `dark:`-Varianten. */
+@theme {
+  --color-brand: #00a4e0;
+  --color-brand-dark: #0083b4;
+
+  --color-surface: #ffffff;
+  --color-surface-2: #fafafa;
+  --color-ink: #27272a;        /* zinc-800 */
+  --color-ink-muted: #52525b;  /* zinc-600 */
+  --color-ink-faint: #a1a1aa;  /* zinc-400 */
+  --color-line: #e4e4e7;       /* zinc-200 */
+  --color-line-soft: #f4f4f5;  /* zinc-100 */
+
+  --color-ok: #059669;         /* emerald-600 */
+  --color-warn: #d97706;       /* amber-600 */
+  --color-err: #dc2626;        /* red-600 */
+}
+
+.dark {
+  --color-surface: #18181b;    /* zinc-900 */
+  --color-surface-2: #121214;
+  --color-ink: #e4e4e7;        /* zinc-200 */
+  --color-ink-muted: #a1a1aa;  /* zinc-400 */
+  --color-ink-faint: #71717a;  /* zinc-500 */
+  --color-line: #2a2a2e;
+  --color-line-soft: #1f1f23;
+
+  --color-ok: #34d399;         /* emerald-400 */
+  --color-warn: #fbbf24;       /* amber-400 */
+  --color-err: #f87171;        /* red-400 */
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+html {
+  color-scheme: light;
+}
+html.dark {
+  color-scheme: dark;
+}
+
+body {
+  background-color: var(--color-surface-2);
+  color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
