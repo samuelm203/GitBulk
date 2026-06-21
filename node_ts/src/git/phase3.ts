@@ -81,11 +81,14 @@ function expandTilde(p: string): string {
   return p;
 }
 
-function resolveRepoPath(workspaceDir: string | undefined, ru: string): string {
+function resolveRepoPath(workspaceDir: string | undefined, ru: string, workspace?: string): string {
   const expandedRu = expandTilde(ru);
   if (isAbsolute(expandedRu)) return expandedRu;
   const base = workspaceDir === undefined ? process.cwd() : expandTilde(workspaceDir);
-  return join(base, expandedRu);
+  // Mit Workspace-Override liegt das Repo in einem eigenen Unterordner je
+  // Workspace (workspaceDir/<workspace>/<ru>) — so kollidieren gleichnamige
+  // Repo-Slugs aus verschiedenen Workspaces lokal nicht.
+  return workspace !== undefined ? join(base, workspace, expandedRu) : join(base, expandedRu);
 }
 
 /**
@@ -103,9 +106,13 @@ function resolveRepoPath(workspaceDir: string | undefined, ru: string): string {
  *
  * @returns `Phase3Result` mit `prStatus` für Phase 4
  */
-export async function runPhase3(ru: string, config: GitBulkConfig): Promise<Phase3Result> {
+export async function runPhase3(
+  ru: string,
+  config: GitBulkConfig,
+  workspace?: string,
+): Promise<Phase3Result> {
   const logger = getDefaultLogger().withRu(ru);
-  const repoPath = resolveRepoPath(config.workspaceDir, ru);
+  const repoPath = resolveRepoPath(config.workspaceDir, ru, workspace);
   const featureBranch = buildFeatureBranchName(config.ticket, config.branch);
 
   const result: Phase3Result = {
@@ -129,8 +136,14 @@ export async function runPhase3(ru: string, config: GitBulkConfig): Promise<Phas
         logger,
       };
       try {
-        // URL-Bau: cloneBaseUrl + RU-Name (typisch: https://bitbucket.org/ws/<ru>.git)
-        const remoteUrl = `${config.cloneBaseUrl.replace(/\/+$/, '')}/${ru}.git`;
+        // URL-Bau: ohne Override `cloneBaseUrl + RU-Name`
+        // (typisch: https://bitbucket.org/ws/<ru>.git). Mit Workspace-Override
+        // wird der Workspace in den Host der cloneBaseUrl eingesetzt:
+        // <origin>/<workspace>/<ru>.git.
+        const remoteUrl =
+          workspace !== undefined
+            ? `${new URL(config.cloneBaseUrl).origin}/${workspace}/${ru}.git`
+            : `${config.cloneBaseUrl.replace(/\/+$/, '')}/${ru}.git`;
         await cloneRepo(remoteUrl, repoPath, baseForClone);
       } catch (err) {
         const msg = `clone failed: ${(err as Error).message}`;

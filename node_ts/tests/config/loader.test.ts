@@ -80,7 +80,7 @@ describe('loadConfig - YAML', () => {
     const p = join(workspace, 'full.yml');
     writeFileSync(p, fullYaml());
     const config = await loadConfig({ path: p, mode: 'strict' });
-    assert.equal(config.rus[0], 'repo-a');
+    assert.deepEqual(config.rus[0], { repo: 'repo-a' });
   });
 
   it('throws ConfigError for invalid YAML syntax', async () => {

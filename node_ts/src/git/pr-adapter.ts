@@ -24,6 +24,12 @@ import type { GitBulkConfig } from '../config/schema.js';
 export interface CreatePrInput {
   /** RU-Name (Repository-Slug auf der Plattform) */
   ru: string;
+  /**
+   * Optionaler Workspace-Override für genau diese RU (Bitbucket-Workspace bzw.
+   * GitHub-Owner). Wenn gesetzt, hat er Vorrang vor dem globalen Wert aus der
+   * Sub-Config — so können RUs aus mehreren Workspaces in einem Lauf landen.
+   */
+  workspace?: string;
   /** Source-Branch (Feature-Branch, vorher gepusht) */
   sourceBranch: string;
   /** Ziel-Branch (z. B. `master`, `main`, `develop`) */

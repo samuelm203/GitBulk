@@ -161,9 +161,10 @@ export class BitbucketPrAdapter implements PullRequestAdapter {
    *           ?state=OPEN&at=refs/heads/<b>&direction=OUTGOING
    */
   private async findOpenPr(input: CreatePrInput): Promise<{ id: number; url: string } | undefined> {
+    const ws = input.workspace ?? this.config.workspace;
     const url = this.cloud
-      ? `${this.apiBase}/repositories/${encodeURIComponent(this.config.workspace)}/${encodeURIComponent(input.ru)}/pullrequests?q=${encodeURIComponent(`source.branch.name="${input.sourceBranch}"`)}&state=OPEN`
-      : `${this.apiBase}/rest/api/1.0/projects/${encodeURIComponent(this.config.workspace)}/repos/${encodeURIComponent(input.ru)}/pull-requests?state=OPEN&at=${encodeURIComponent(`refs/heads/${input.sourceBranch}`)}&direction=OUTGOING`;
+      ? `${this.apiBase}/repositories/${encodeURIComponent(ws)}/${encodeURIComponent(input.ru)}/pullrequests?q=${encodeURIComponent(`source.branch.name="${input.sourceBranch}"`)}&state=OPEN`
+      : `${this.apiBase}/rest/api/1.0/projects/${encodeURIComponent(ws)}/repos/${encodeURIComponent(input.ru)}/pull-requests?state=OPEN&at=${encodeURIComponent(`refs/heads/${input.sourceBranch}`)}&direction=OUTGOING`;
     try {
       const res = await fetch(url, {
         method: 'GET',
@@ -182,7 +183,7 @@ export class BitbucketPrAdapter implements PullRequestAdapter {
         const links = first.links as { html?: { href?: string } } | undefined;
         prUrl =
           links?.html?.href ??
-          `https://bitbucket.org/${this.config.workspace}/${input.ru}/pull-requests/${id}`;
+          `https://bitbucket.org/${ws}/${input.ru}/pull-requests/${id}`;
       } else {
         const links = first.links as { self?: Array<{ href?: string }> } | undefined;
         prUrl = links?.self?.[0]?.href ?? `${this.apiBase}`;
@@ -204,8 +205,9 @@ export class BitbucketPrAdapter implements PullRequestAdapter {
    * Project-Key interpretiert (typische Verwendung in Self-Hosted-Setups).
    */
   private buildRequest(input: CreatePrInput): { url: string; body: object } {
+    const ws = input.workspace ?? this.config.workspace;
     if (this.cloud) {
-      const url = `${this.apiBase}/repositories/${encodeURIComponent(this.config.workspace)}/${encodeURIComponent(input.ru)}/pullrequests`;
+      const url = `${this.apiBase}/repositories/${encodeURIComponent(ws)}/${encodeURIComponent(input.ru)}/pullrequests`;
       const body: Record<string, unknown> = {
         title: input.title,
         source: { branch: { name: input.sourceBranch } },
@@ -250,6 +252,7 @@ export class BitbucketPrAdapter implements PullRequestAdapter {
    * also Fallback-freundlich parsen.
    */
   private parseSuccess(statusCode: number, rawBody: string, input: CreatePrInput): CreatePrResult {
+    const ws = input.workspace ?? this.config.workspace;
     try {
       const data = JSON.parse(rawBody) as Record<string, unknown>;
 
@@ -259,7 +262,7 @@ export class BitbucketPrAdapter implements PullRequestAdapter {
         const links = data.links as Record<string, { href?: string }> | undefined;
         const url =
           links?.html?.href ??
-          `https://bitbucket.org/${this.config.workspace}/${input.ru}/pull-requests/${id}`;
+          `https://bitbucket.org/${ws}/${input.ru}/pull-requests/${id}`;
         return { ok: true, id, url, statusCode };
       }
 

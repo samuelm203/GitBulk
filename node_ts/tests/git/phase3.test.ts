@@ -54,7 +54,7 @@ describe('Phase 3 - 3.1 Existence check', () => {
     const ws = createWorkspace();
     try {
       const config = makeConfig(ws, writeShellScript(ws, 'exit 0'), {
-        rus: ['does-not-exist'],
+        rus: [{ repo: 'does-not-exist' }],
       });
       const result = await runPhase3('does-not-exist', config);
       assert.equal(result.processed, false);

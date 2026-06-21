@@ -8,10 +8,27 @@
   "required": ["rus", "ticket", "branch", "commitMessage", "prSummary", "createPrOnError", "prPlatform"],
   "properties": {
     "rus": {
-      "description": "Repository units to process. A comma-separated string or an array. Each name must start alphanumeric and contain only letters, digits, '.', '_', '-' (no path separators or '..').",
+      "description": "Repository units to process. A comma-separated string, or an array of names and/or { repo, workspace } objects. Set `workspace` to target a different Bitbucket workspace / GitHub owner for that RU. Names and workspaces must start alphanumeric and contain only letters, digits, '.', '_', '-' (no path separators or '..').",
       "oneOf": [
         { "type": "string", "minLength": 1 },
-        { "type": "array", "items": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$" }, "minItems": 1 }
+        {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "oneOf": [
+              { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$" },
+              {
+                "type": "object",
+                "required": ["repo"],
+                "additionalProperties": false,
+                "properties": {
+                  "repo": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$" },
+                  "workspace": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$" }
+                }
+              }
+            ]
+          }
+        }
       ]
     },
     "ticket": {

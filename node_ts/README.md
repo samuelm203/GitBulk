@@ -161,6 +161,9 @@ rus:
   - my-service-api
   - my-service-frontend
   - my-service-worker
+  # A single run can span multiple Bitbucket workspaces / GitHub owners:
+  # give an entry an explicit `workspace` to override the global default.
+  # - { repo: legacy-tool, workspace: other-workspace }
 ticket: AKB-1234
 branch: feature/update-dependencies
 
@@ -211,7 +214,7 @@ bitbucket:
 
 | Field              | Required | Default     | Description                                                        |
 | ------------------ | -------- | ----------- | ------------------------------------------------------------------ |
-| `rus`              | yes      | —           | Repository units (array or comma-separated string). Each name must match `^[A-Za-z0-9][A-Za-z0-9._-]*$`. |
+| `rus`              | yes      | —           | Repository units. Either a name (`repo-a`) or `{ repo, workspace }` to target a different Bitbucket workspace / GitHub owner per RU. Names/workspaces must match `^[A-Za-z0-9][A-Za-z0-9._-]*$`. |
 | `ticket`           | yes      | —           | Ticket identifier; prefixes the branch name (`<ticket>-<branch>`). |
 | `branch`           | yes      | —           | Feature branch name (sanitized automatically).                     |
 | `script`           | cond.    | —           | Path to the code-change script. Set this **or** `operations`.      |

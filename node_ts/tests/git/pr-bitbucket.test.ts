@@ -69,6 +69,20 @@ describe('BitbucketPrAdapter - Cloud variant', () => {
     assert.equal(mock.requests[1]!.url, '/repositories/my-ws/repo-a/pullrequests');
   });
 
+  it('honors a per-RU workspace override in lookup + create URLs', async () => {
+    mock.enqueue(EMPTY_LOOKUP);
+    mock.enqueue({ status: 201, body: { id: 7 } });
+    // Adapter-Default ist "default-ws"; der Input überschreibt mit "override-ws".
+    const result = await cloudAdapter('default-ws').createPullRequest({
+      ...baseInput,
+      workspace: 'override-ws',
+    });
+    assert.equal(result.ok, true);
+    // Sowohl der Lookup-GET als auch der Create-POST nutzen den Override.
+    assert.match(mock.requests[0]!.url, /^\/repositories\/override-ws\/repo-a\/pullrequests\?q=/);
+    assert.equal(mock.requests[1]!.url, '/repositories/override-ws/repo-a/pullrequests');
+  });
+
   it('uses Cloud payload format (source.branch.name)', async () => {
     mock.enqueue(EMPTY_LOOKUP);
     mock.enqueue({ status: 201, body: { id: 1 } });

@@ -16,12 +16,15 @@
 import { z } from 'zod';
 
 import {
-  validateRuList,
+  validateRuSpecList,
   validateBranchName,
   validateTicket,
   validateFilePath,
   validateMessage,
+  type RuSpec,
 } from '../utils/validators.js';
+
+export type { RuSpec } from '../utils/validators.js';
 // Seiteneffekt-Import: registriert alle bekannten Operationen, damit die
 // `operations`-Validierung weiter unten gegen die Registry prüfen kann.
 import { getOperation, listOperationTypes } from '../operations/index.js';
@@ -147,17 +150,34 @@ export const GitBulkConfigSchema = z
     // Phase 1: "Input from User" — Pflichtfelder im Datei-Modus
     // ──────────────────────────────────────────────────────────────
 
-    /** Flowchart: `$config.rus` — Liste der Repository-Units */
+    /**
+     * Flowchart: `$config.rus` — Liste der Repository-Units.
+     *
+     * Akzeptiert reine Namen (rückwärtskompatibel) ODER strukturierte Einträge
+     * `{ repo, workspace }`, um RUs aus mehreren Bitbucket-Workspaces / GitHub-
+     * Ownern in EINEM Lauf zu verarbeiten. Wird intern zu `RuSpec[]` normalisiert.
+     *
+     * Beispiel:
+     * ```yaml
+     * rus:
+     *   - repo-a                       # globaler Default-Workspace
+     *   - { repo: repo-b, workspace: other-ws }
+     * ```
+     */
     rus: z
-      .union([z.string(), z.array(z.string())])
-      .transform((input) => {
-        const result = validateRuList(input);
-        if (!result.ok) {
-          // Wird durch superRefine erneut geprüft; transform liefert hier
-          // bereits den bereinigten Array, sodass Folgeprüfungen darauf laufen.
-          return [];
-        }
-        return result.value;
+      .union([
+        z.string(),
+        z.array(
+          z.union([
+            z.string(),
+            z.object({ repo: z.string(), workspace: z.string().optional() }),
+          ]),
+        ),
+      ])
+      .transform((input): RuSpec[] => {
+        const result = validateRuSpecList(input);
+        // Bei Fehler leeres Array; die superRefine unten meldet das.
+        return result.ok ? result.value : [];
       })
       .superRefine((value, ctx) => {
         if (value.length === 0) {

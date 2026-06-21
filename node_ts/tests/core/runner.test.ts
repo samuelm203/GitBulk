@@ -11,7 +11,7 @@ import type {
   CreatePrResult,
   PullRequestAdapter,
 } from '../../src/git/pr-adapter.js';
-import type { GitBulkConfig } from '../../src/config/schema.js';
+import type { GitBulkConfig, RuSpec } from '../../src/config/schema.js';
 import { setDefaultLogger, createLogger } from '../../src/utils/logger.js';
 import {
   createWorkspace,
@@ -47,10 +47,16 @@ class MockAdapter implements PullRequestAdapter {
 function makeConfig(
   workspace: string,
   scriptPath: string,
-  overrides: Partial<GitBulkConfig> = {},
+  overrides: Partial<Omit<GitBulkConfig, 'rus'>> & { rus?: ReadonlyArray<string | RuSpec> } = {},
 ): GitBulkConfig {
+  // `rus` darf als reine Namen ODER RuSpec-Objekte übergeben werden und wird
+  // hier — wie der echte Schema-Transform — zu RuSpec[] normalisiert.
+  const { rus: rusOverride, ...rest } = overrides;
+  const rus: RuSpec[] = (rusOverride ?? ['repo-a']).map((r) =>
+    typeof r === 'string' ? { repo: r } : r,
+  );
   return {
-    rus: ['repo-a'],
+    rus,
     ticket: 'AKB-1',
     branch: 'feature/x',
     script: scriptPath,
@@ -72,7 +78,7 @@ function makeConfig(
       targetBranch: 'master',
       reviewers: [],
     },
-    ...overrides,
+    ...rest,
   } as GitBulkConfig;
 }
 

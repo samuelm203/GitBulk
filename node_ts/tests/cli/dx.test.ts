@@ -13,7 +13,7 @@ import type { GitBulkConfig } from '../../src/config/schema.js';
 
 /** Minimal-Config mit den gegebenen RUs (nur das für filterRus Nötige). */
 function makeConfig(rus: string[]): GitBulkConfig {
-  return { rus } as unknown as GitBulkConfig;
+  return { rus: rus.map((repo) => ({ repo })) } as unknown as GitBulkConfig;
 }
 
 describe('filterRus', () => {
@@ -28,14 +28,14 @@ describe('filterRus', () => {
     const cfg = makeConfig(['a', 'b', 'c']);
     // Reihenfolge der --only-Eingabe ist egal; die Config-Reihenfolge gewinnt.
     const out = filterRus(cfg, 'c, a');
-    assert.deepEqual(out.rus, ['a', 'c']);
+    assert.deepEqual(out.rus, [{ repo: 'a' }, { repo: 'c' }]);
     assert.notEqual(out, cfg, 'should return a new frozen object');
     assert.ok(Object.isFrozen(out));
   });
 
   it('trims whitespace and ignores empty entries', () => {
     const cfg = makeConfig(['a', 'b']);
-    assert.deepEqual(filterRus(cfg, ' a , , b ').rus, ['a', 'b']);
+    assert.deepEqual(filterRus(cfg, ' a , , b ').rus, [{ repo: 'a' }, { repo: 'b' }]);
   });
 
   it('throws on unknown RU names', () => {

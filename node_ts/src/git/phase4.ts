@@ -69,6 +69,7 @@ export async function runPhase4(
   phase3: Phase3Result,
   config: GitBulkConfig,
   adapter: PullRequestAdapter,
+  workspace?: string,
 ): Promise<Phase4Result> {
   const logger = getDefaultLogger().withRu(phase3.ru);
   const result: Phase4Result = {
@@ -107,6 +108,8 @@ export async function runPhase4(
     description: config.prSummary,
     reviewers: getReviewers(config),
   };
+  // Per-RU-Workspace-Override (falls gesetzt) — sonst gilt der globale Default.
+  if (workspace !== undefined) input.workspace = workspace;
 
   // ── 4.2 Im Dry-Run NICHT wirklich aufrufen ─────────────────────
   if (config.dryRun) {

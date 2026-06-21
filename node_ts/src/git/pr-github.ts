@@ -67,7 +67,8 @@ export class GitHubPrAdapter implements PullRequestAdapter {
    * Body: { title, head, base, body }
    */
   public async createPullRequest(input: CreatePrInput): Promise<CreatePrResult> {
-    const url = `${this.apiBase}/repos/${encodeURIComponent(this.config.owner)}/${encodeURIComponent(input.ru)}/pulls`;
+    const owner = input.workspace ?? this.config.owner;
+    const url = `${this.apiBase}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(input.ru)}/pulls`;
     const body: Record<string, unknown> = {
       title: input.title,
       head: input.sourceBranch,
@@ -110,7 +111,7 @@ export class GitHubPrAdapter implements PullRequestAdapter {
 
     // Reviewer best-effort anfordern — ein Fehler hier macht den PR NICHT ungültig.
     if (success.ok && input.reviewers.length > 0 && typeof success.id === 'number') {
-      await this.requestReviewers(input.ru, success.id, input.reviewers);
+      await this.requestReviewers(owner, input.ru, success.id, input.reviewers);
     }
 
     return success;
@@ -125,8 +126,9 @@ export class GitHubPrAdapter implements PullRequestAdapter {
    * @returns `{ id, url }` des ersten Treffers oder `undefined`.
    */
   private async findOpenPr(input: CreatePrInput): Promise<{ id: number; url: string } | undefined> {
-    const head = `${encodeURIComponent(this.config.owner)}:${encodeURIComponent(input.sourceBranch)}`;
-    const url = `${this.apiBase}/repos/${encodeURIComponent(this.config.owner)}/${encodeURIComponent(input.ru)}/pulls?head=${head}&state=open`;
+    const owner = input.workspace ?? this.config.owner;
+    const head = `${encodeURIComponent(owner)}:${encodeURIComponent(input.sourceBranch)}`;
+    const url = `${this.apiBase}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(input.ru)}/pulls?head=${head}&state=open`;
     try {
       const res = await fetch(url, { method: 'GET', headers: this.headers() });
       if (res.status !== 200) return undefined;
@@ -134,7 +136,7 @@ export class GitHubPrAdapter implements PullRequestAdapter {
       if (Array.isArray(data) && data.length > 0) {
         const pr = data[0] as { number?: number; html_url?: string };
         if (typeof pr.number === 'number') {
-          const fallback = `https://github.com/${this.config.owner}/${input.ru}/pull/${pr.number}`;
+          const fallback = `https://github.com/${owner}/${input.ru}/pull/${pr.number}`;
           return { id: pr.number, url: pr.html_url ?? fallback };
         }
       }
@@ -146,11 +148,12 @@ export class GitHubPrAdapter implements PullRequestAdapter {
 
   /** Extrahiert PR-Nummer und URL aus der Erfolgs-Antwort. */
   private parseSuccess(statusCode: number, rawBody: string, input: CreatePrInput): CreatePrResult {
+    const owner = input.workspace ?? this.config.owner;
     try {
       const data = JSON.parse(rawBody) as { number?: number; html_url?: string };
       const id = data.number ?? 'unknown';
       const url =
-        data.html_url ?? `https://github.com/${this.config.owner}/${input.ru}/pull/${String(id)}`;
+        data.html_url ?? `https://github.com/${owner}/${input.ru}/pull/${String(id)}`;
       return { ok: true, id, url, statusCode };
     } catch {
       return { ok: true, id: 'unknown', url: '', statusCode };
@@ -178,8 +181,13 @@ export class GitHubPrAdapter implements PullRequestAdapter {
    * Fordert Reviewer für einen erstellten PR an (best-effort).
    * Fehler werden nur geloggt, nicht propagiert — der PR existiert bereits.
    */
-  private async requestReviewers(ru: string, prNumber: number, reviewers: readonly string[]): Promise<void> {
-    const url = `${this.apiBase}/repos/${encodeURIComponent(this.config.owner)}/${encodeURIComponent(ru)}/pulls/${prNumber}/requested_reviewers`;
+  private async requestReviewers(
+    owner: string,
+    ru: string,
+    prNumber: number,
+    reviewers: readonly string[],
+  ): Promise<void> {
+    const url = `${this.apiBase}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(ru)}/pulls/${prNumber}/requested_reviewers`;
     try {
       const res = await fetch(url, {
         method: 'POST',
