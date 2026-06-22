@@ -11,7 +11,7 @@
  *   6. Runner ausführen
  *   7. Summary drucken, Exit-Code setzen
  *
- * Subkommandos: `init`, `list-operations`. Alles andere ist der Bulk-Flow.
+ * Subkommandos: `init`, `auth`, `list-operations`. Alles andere ist der Bulk-Flow.
  *
  * Exit-Codes:
  *   0 — Alle RUs erfolgreich verarbeitet (auch wenn manche skipped sind)
@@ -44,6 +44,7 @@ import { runTui } from '../tui/index.js';
 import { runGui } from '../gui/index.js';
 import { runInitGenerator } from './init.js';
 import { runListOperations } from './list-operations.js';
+import { runAuth } from './auth.js';
 import { filterRus } from './filter-rus.js';
 import { handleSpecialFlags } from './special-flags.js';
 import { VERSION } from '../index.js';
@@ -54,6 +55,7 @@ const HELP = `gitbulk — Configurable CLI tool for bulk operations on Git repos
 Usage:
   gitbulk [options]                  Run the bulk flow (config -> per-RU git + PR)
   gitbulk init [options]             Generate an operations config or a code-change script
+  gitbulk auth <login|logout|status> Store/remove a PR token (~/.gitbulk/credentials.json)
   gitbulk list-operations [--json]   List the available declarative operations
 
 Options:
@@ -74,6 +76,9 @@ init options:
   -o, --output <path>    Output file path
   -f, --force            Overwrite the output file instead of auto-incrementing the name
 
+auth options:
+      --platform <p>     Platform: bitbucket | github (required for login)
+
 Exit codes: 0 ok | 1 a PR failed | 2 a fatal per-RU error | 3 setup error | 130 SIGINT
 `;
 
@@ -91,6 +96,19 @@ const LIST_HELP = `gitbulk list-operations — List all available declarative op
 
 Options:
       --json   Output as JSON (machine-readable)
+`;
+
+/** Hilfetext für `gitbulk auth`. */
+const AUTH_HELP = `gitbulk auth — Store or remove a PR platform token.
+
+The token is saved OUTSIDE any repo in ~/.gitbulk/credentials.json (file mode 0600).
+At run time the resolution order is: env var > stored token > interactive prompt.
+Tokens are never printed or logged.
+
+Usage:
+  gitbulk auth login --platform <bitbucket|github>   Prompt (hidden) and store a token
+  gitbulk auth logout [--platform <p>]               Remove a stored token (omit = all)
+  gitbulk auth status                                Show which tokens are available
 `;
 
 
@@ -121,6 +139,7 @@ function parseCliArgs() {
       output: { type: 'string', short: 'o' },
       force: { type: 'boolean', short: 'f', default: false },
       json: { type: 'boolean', default: false },
+      platform: { type: 'string' },
     },
   });
 }
@@ -214,7 +233,10 @@ async function main(): Promise<number> {
       process.stdout.write(INIT_HELP);
       return 0;
     }
-    if (provided.has('json')) return usageError('`--json` is not valid for `init`.');
+    const initInvalid = ['json', 'platform'].filter((o) => provided.has(o));
+    if (initInvalid.length > 0) {
+      return usageError(`Option(s) ${initInvalid.map((o) => `--${o}`).join(', ')} are not valid for \`init\`.`);
+    }
     const initStray = bulkOnlyError('init');
     if (initStray !== undefined) return initStray;
     if (positionals.length > 1) return usageError(`Unexpected argument "${positionals[1]}" for init.`);
@@ -228,8 +250,11 @@ async function main(): Promise<number> {
       process.stdout.write(LIST_HELP);
       return 0;
     }
-    if (provided.has('output') || provided.has('force')) {
-      return usageError('`--output`/`--force` are only valid for `init`.');
+    const listInvalid = ['output', 'force', 'platform'].filter((o) => provided.has(o));
+    if (listInvalid.length > 0) {
+      return usageError(
+        `Option(s) ${listInvalid.map((o) => `--${o}`).join(', ')} are not valid for \`list-operations\`.`,
+      );
     }
     const listStray = bulkOnlyError('list-operations');
     if (listStray !== undefined) return listStray;
@@ -238,16 +263,42 @@ async function main(): Promise<number> {
     }
     return runListOperations({ json: values.json ?? false, noColor: !useColor });
   }
+  if (subcommand === 'auth') {
+    if (values.help) {
+      process.stdout.write(AUTH_HELP);
+      return 0;
+    }
+    const authInvalid = ['output', 'force', 'json'].filter((o) => provided.has(o));
+    if (authInvalid.length > 0) {
+      return usageError(`Option(s) ${authInvalid.map((o) => `--${o}`).join(', ')} are not valid for \`auth\`.`);
+    }
+    const authBulkStray = bulkOnlyError('auth');
+    if (authBulkStray !== undefined) return authBulkStray;
+    const action = positionals[1];
+    if (action !== 'login' && action !== 'logout' && action !== 'status') {
+      return usageError('`auth` requires an action: login | logout | status.');
+    }
+    if (positionals.length > 2) {
+      return usageError(`Unexpected argument "${positionals[2]}" for auth.`);
+    }
+    if (values.platform !== undefined && values.platform !== 'bitbucket' && values.platform !== 'github') {
+      return usageError(`Invalid --platform "${values.platform}". Allowed: bitbucket, github.`);
+    }
+    const interactive = process.stdin.isTTY === true && process.stdout.isTTY === true;
+    const authOpts: Parameters<typeof runAuth>[0] = { action, interactive, noColor: !useColor };
+    if (values.platform !== undefined) authOpts.platform = values.platform;
+    return runAuth(authOpts);
+  }
   if (subcommand !== undefined) {
     printError(`Unknown command "${subcommand}". Run "gitbulk --help" for usage.`, useColor);
     return 3;
   }
 
   // Subkommando-Optionen sind im Bulk-Flow ungültig (statt still ignoriert).
-  const strayOpts = ['output', 'force', 'json'].filter((o) => provided.has(o));
+  const strayOpts = ['output', 'force', 'json', 'platform'].filter((o) => provided.has(o));
   if (strayOpts.length > 0) {
     return usageError(
-      `Option(s) ${strayOpts.map((o) => `--${o}`).join(', ')} are only valid for a subcommand (init / list-operations).`,
+      `Option(s) ${strayOpts.map((o) => `--${o}`).join(', ')} are only valid for a subcommand (init / auth / list-operations).`,
     );
   }
 
