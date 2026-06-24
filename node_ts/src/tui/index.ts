@@ -188,7 +188,7 @@ export async function runTui(options: TuiOptions = {}): Promise<number> {
     );
   }
 
-  const rows: TuiRuRow[] = config.rus.map((ru) => ({ ru, status: 'pending' as const }));
+  const rows: TuiRuRow[] = config.rus.map((r) => ({ ru: r.repo, status: 'pending' as const }));
   const renderer = new TuiRenderer(rows, {
     noColor: !useColor,
     noSpinner: !useSpinner,

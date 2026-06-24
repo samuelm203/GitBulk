@@ -198,4 +198,14 @@ describe('Phase 4 - Reviewer + target branch routing', () => {
     assert.equal(adapter.calls[0]!.targetBranch, 'main');
     assert.deepEqual([...adapter.calls[0]!.reviewers], ['octocat', 'hubot']);
   });
+
+  it('passes a per-RU workspace override into the PR input', async () => {
+    await runPhase4(makePhase3(), makeConfig(), adapter, 'override-ws');
+    assert.equal(adapter.calls[0]!.workspace, 'override-ws');
+  });
+
+  it('leaves workspace undefined when no override is given', async () => {
+    await runPhase4(makePhase3(), makeConfig(), adapter);
+    assert.equal(adapter.calls[0]!.workspace, undefined);
+  });
 });

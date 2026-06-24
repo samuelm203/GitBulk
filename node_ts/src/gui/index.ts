@@ -143,7 +143,7 @@ export async function runGui(options: GuiOptions = {}): Promise<number> {
 
   const handle = await startGuiServer({
     model: {
-      rus: [...frozenConfig.rus],
+      rus: frozenConfig.rus.map((r) => r.repo),
       dryRun: frozenConfig.dryRun,
       concurrency: frozenConfig.concurrency,
       platform: frozenConfig.prPlatform,

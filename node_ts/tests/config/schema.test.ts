@@ -69,10 +69,30 @@ describe('GitBulkConfigSchema', () => {
     }
   });
 
-  it('normalizes rus from comma-separated string', () => {
+  it('normalizes rus from comma-separated string to RuSpec[]', () => {
     const result = GitBulkConfigSchema.safeParse(validConfig({ rus: 'a, b, c' }));
     assert.equal(result.success, true);
-    if (result.success) assert.deepEqual(result.data.rus, ['a', 'b', 'c']);
+    if (result.success) assert.deepEqual(result.data.rus, [{ repo: 'a' }, { repo: 'b' }, { repo: 'c' }]);
+  });
+
+  it('normalizes mixed string + structured rus (per-RU workspace)', () => {
+    const result = GitBulkConfigSchema.safeParse(
+      validConfig({ rus: ['repo-a', { repo: 'repo-b', workspace: 'other-ws' }] }),
+    );
+    assert.equal(result.success, true);
+    if (result.success) {
+      assert.deepEqual(result.data.rus, [
+        { repo: 'repo-a' },
+        { repo: 'repo-b', workspace: 'other-ws' },
+      ]);
+    }
+  });
+
+  it('rejects an invalid workspace name in a structured rus entry', () => {
+    const result = GitBulkConfigSchema.safeParse(
+      validConfig({ rus: [{ repo: 'repo-a', workspace: 'bad/ws' }] }),
+    );
+    assert.equal(result.success, false);
   });
 
   it('rejects empty rus', () => {

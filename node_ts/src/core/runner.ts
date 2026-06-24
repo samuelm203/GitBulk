@@ -20,7 +20,7 @@
 
 import { createLimit } from '../utils/concurrency.js';
 
-import type { GitBulkConfig } from '../config/schema.js';
+import type { GitBulkConfig, RuSpec } from '../config/schema.js';
 import { runPhase3, type Phase3Result } from '../git/phase3.js';
 import { runPhase4, type Phase4Result } from '../git/phase4.js';
 import { createPrAdapter, type PullRequestAdapter } from '../git/pr-adapter.js';
@@ -161,7 +161,7 @@ function classifyOutcome(p3: Phase3Result, p4: Phase4Result): RuResult['outcome'
  * Verarbeitet eine einzelne RU: Phase 3 → Phase 4.
  */
 async function processRu(
-  ru: string,
+  ruSpec: RuSpec,
   config: GitBulkConfig,
   adapter: PullRequestAdapter,
   logger: Logger,
@@ -172,6 +172,10 @@ async function processRu(
     onProgress?: (event: RuProgressEvent) => void;
   },
 ): Promise<RuResult> {
+  // `ru` ist der Repo-Slug (Name in Logs/Events/Pfaden), `workspace` der
+  // optionale Per-RU-Override für PR-Erstellung und Klonen.
+  const ru = ruSpec.repo;
+  const workspace = ruSpec.workspace;
   const ruLogger = logger.withRu(ru);
   const startedAt = Date.now();
 
@@ -219,13 +223,14 @@ async function processRu(
   emit('running', { stage: 'git' });
   ruLogger.info(`Starting processing`);
 
-  // Phase 3
-  const phase3 = await runPhase3(ru, config);
+  // Phase 3 — Workspace-Override fließt in Repo-Pfad + Clone-URL.
+  const phase3 = await runPhase3(ru, config, workspace);
 
   // Phase 4 (auch bei 'empty' aufrufen — die Phase loggt selbst korrekt).
   // Stage-Wechsel melden, damit UIs (GUI-Pipeline) ehrlich umschalten können.
+  // Workspace-Override fließt in die PR-Ziel-URL.
   emit('running', { stage: 'pr' });
-  const phase4 = await runPhase4(phase3, config, adapter);
+  const phase4 = await runPhase4(phase3, config, adapter, workspace);
 
   const result: RuResult = {
     ru,
@@ -337,8 +342,8 @@ export async function runBulk(
   if (options.onProgress) baseCtx.onProgress = options.onProgress;
 
   // Pro RU eine Task, p-limit regelt die parallele Ausführung.
-  const tasks = config.rus.map((ru, index) =>
-    limit(() => processRu(ru, config, adapter, logger, { ...baseCtx, index })),
+  const tasks = config.rus.map((ruSpec, index) =>
+    limit(() => processRu(ruSpec, config, adapter, logger, { ...baseCtx, index })),
   );
 
   const results = await Promise.all(tasks);

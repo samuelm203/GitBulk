@@ -64,6 +64,75 @@ export function validateRuList(input: string | readonly string[]): ValidationRes
 }
 
 /**
+ * Eine Repository-Unit mit optionalem Workspace-Override.
+ *
+ * `repo` ist der Repo-Slug (wie bisher), `workspace` überschreibt — wenn
+ * gesetzt — den globalen `bitbucket.workspace` (bzw. GitHub-`owner`) für genau
+ * diese RU. So lassen sich RUs aus mehreren Workspaces in EINEM Lauf
+ * verarbeiten. Fehlt `workspace`, gilt der globale Default.
+ */
+export interface RuSpec {
+  repo: string;
+  workspace?: string;
+}
+
+/** Roh-Eingabeform für die RU-Liste (String, Namen-Array oder strukturierte Einträge). */
+export type RuSpecInput = string | ReadonlyArray<string | { repo?: unknown; workspace?: unknown }>;
+
+/**
+ * Validiert und normalisiert die RU-Liste zu `RuSpec[]` — akzeptiert sowohl
+ * reine Namen (rückwärtskompatibel) als auch `{ repo, workspace }`-Objekte.
+ *
+ * Der `workspace` wird mit demselben strengen Muster wie ein RU-Name geprüft,
+ * weil er ebenfalls als Pfad- und URL-Segment verwendet wird
+ * (Path-Traversal-/Injection-Schutz, kein `/`).
+ */
+export function validateRuSpecList(input: RuSpecInput): ValidationResult<RuSpec[]> {
+  const raw: ReadonlyArray<string | { repo?: unknown; workspace?: unknown }> =
+    typeof input === 'string' ? input.split(',') : input;
+
+  const specs: RuSpec[] = [];
+  for (const entry of raw) {
+    let repo: string;
+    let workspace: string | undefined;
+
+    if (typeof entry === 'string') {
+      repo = entry.trim();
+    } else if (entry !== null && typeof entry === 'object') {
+      repo = typeof entry.repo === 'string' ? entry.repo.trim() : '';
+      if (typeof entry.workspace === 'string' && entry.workspace.trim().length > 0) {
+        workspace = entry.workspace.trim();
+      }
+    } else {
+      return { ok: false, error: 'Error: invalid RU entry (expected a name or { repo, workspace })' };
+    }
+
+    if (repo.length === 0) continue; // leere Einträge überspringen (wie validateRuList)
+
+    if (!RU_NAME_PATTERN.test(repo)) {
+      return {
+        ok: false,
+        error: `Error: invalid RU name "${repo}" — allowed: letters, digits, '.', '_', '-' (must start alphanumeric; no '/', '\\' or '..')`,
+      };
+    }
+    if (workspace !== undefined && !RU_NAME_PATTERN.test(workspace)) {
+      return {
+        ok: false,
+        error: `Error: invalid workspace "${workspace}" for RU "${repo}" — allowed: letters, digits, '.', '_', '-' (no '/', '\\')`,
+      };
+    }
+
+    specs.push(workspace !== undefined ? { repo, workspace } : { repo });
+  }
+
+  if (specs.length === 0) {
+    return { ok: false, error: 'Error: RU list is missing' };
+  }
+
+  return { ok: true, value: specs };
+}
+
+/**
  * Git-Branch-Name-Regeln (vereinfachte Umsetzung der `git check-ref-format`-Spec).
  *
  * Erlaubt: Buchstaben, Zahlen, `-`, `_`, `/`, `.`

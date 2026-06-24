@@ -31,15 +31,17 @@ export function filterRus(config: GitBulkConfig, only: string | undefined): GitB
     return config;
   }
 
-  const unknown = wanted.filter((w) => !config.rus.includes(w));
+  const unknown = wanted.filter((w) => !config.rus.some((r) => r.repo === w));
   if (unknown.length > 0) {
     throw new Error(
-      `--only: unknown RU(s): ${unknown.join(', ')}. Configured RUs: ${config.rus.join(', ')}`,
+      `--only: unknown RU(s): ${unknown.join(', ')}. Configured RUs: ${config.rus
+        .map((r) => r.repo)
+        .join(', ')}`,
     );
   }
 
   // Reihenfolge der Config beibehalten, nur die gewünschten behalten.
-  const filtered = config.rus.filter((r) => wanted.includes(r));
+  const filtered = config.rus.filter((r) => wanted.includes(r.repo));
   if (filtered.length === 0) {
     throw new Error('--only: no RUs left after filtering');
   }
