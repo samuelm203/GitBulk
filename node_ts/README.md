@@ -372,12 +372,35 @@ gitbulk init [options]          Interactively generate a config or a standalone 
   -o, --output <path>    Output file path
   -f, --force            Overwrite the output file instead of auto-incrementing the name
 
+gitbulk template [options]      Print a ready-to-edit config template (no prompts)
+      --full             Full template with every field + comments (default)
+      --minimal          Only the required fields
+  -o, --output <path>    Write to a file instead of stdout
+  -f, --force            Overwrite the output file if it exists
+
 gitbulk auth <login|logout|status>  Store/remove a PR token (~/.gitbulk/credentials.json)
       --platform <p>     bitbucket | github (required for login)
 
 gitbulk list-operations [opts]  List all available operations and their parameters
       --json             Output as JSON (machine-readable)
 ```
+
+### Config template (`gitbulk template`)
+
+When you'd rather start from a file and edit it by hand than answer the interactive prompts of
+`gitbulk init`, use `gitbulk template`. It prints a **schema-valid** YAML config (no prompts):
+
+```bash
+gitbulk template                      # full template (every field + comments) to stdout
+gitbulk template --minimal            # only the required fields
+gitbulk template -o gitbulk.yaml      # write to a file (-f/--force to overwrite)
+gitbulk template --minimal > my.yaml  # or just redirect stdout
+```
+
+The **full** template (default) documents every field with its default; the **minimal** template
+contains only the required fields so you can get going quickly. Both use an `operations:` block, so
+the emitted config is valid as-is without a separate script file. Tokens are **never** part of the
+template — they come from environment variables (or `gitbulk auth`, below).
 
 ### Storing a token (`gitbulk auth`)
 
