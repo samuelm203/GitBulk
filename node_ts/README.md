@@ -339,10 +339,11 @@ gitbulk init --output ./my.yaml    # write to an explicit path instead of ./gitb
 gitbulk init --force               # overwrite the existing output file instead of incrementing
 ```
 
-> The API token is never written to the config — it is read at runtime from an environment
-> variable: `GITBULK_BITBUCKET_TOKEN` for Bitbucket, `GITBULK_GITHUB_TOKEN` for GitHub.
-> If the variable is missing, GitBulk **prompts for it (hidden input)** when running in a real
-> terminal and keeps it in memory only; in non-interactive/CI runs it exits with a clear error.
+> The API token is never written to the config. At runtime it is resolved in this order:
+> **environment variable** (`GITBULK_BITBUCKET_TOKEN` / `GITBULK_GITHUB_TOKEN`) →
+> **stored token** (`gitbulk auth login`, saved in `~/.gitbulk/credentials.json`, mode `0600`,
+> outside any repo) → **interactive prompt** (hidden input, real terminal only). In
+> non-interactive/CI runs without a token it exits with a clear error. The token is never logged.
 
 ---
 
@@ -371,9 +372,27 @@ gitbulk init [options]          Interactively generate a config or a standalone 
   -o, --output <path>    Output file path
   -f, --force            Overwrite the output file instead of auto-incrementing the name
 
+gitbulk auth <login|logout|status>  Store/remove a PR token (~/.gitbulk/credentials.json)
+      --platform <p>     bitbucket | github (required for login)
+
 gitbulk list-operations [opts]  List all available operations and their parameters
       --json             Output as JSON (machine-readable)
 ```
+
+### Storing a token (`gitbulk auth`)
+
+By default a token must be present in its environment variable for each run. To store it once:
+
+```bash
+gitbulk auth login --platform bitbucket   # prompts (hidden) and saves the token
+gitbulk auth status                        # shows which platforms have a token (never the value)
+gitbulk auth logout --platform bitbucket   # remove it again (omit --platform to clear all)
+```
+
+The token is saved **outside any repository** in `~/.gitbulk/credentials.json` (file mode `0600`;
+relocatable via `GITBULK_HOME`) and is **never** written to a project config or logged. At run
+time the resolution order is **environment variable → stored token → interactive prompt**, so an
+env var always wins (handy for CI).
 
 Use `--only` to run a subset without editing the config, e.g.
 `gitbulk --config gitbulk.yaml --only service-api,service-worker --dry-run`.
@@ -501,8 +520,10 @@ A `RunSummary` is printed at the end with per-repository outcomes and totals.
 - **RU-name validation.** Repository names — used as directory segments, URL segments, and `git`
   arguments — must match `^[A-Za-z0-9][A-Za-z0-9._-]*$`. This blocks path separators, `..`
   traversal, a leading `-` (which git could misread as an option), and whitespace/control chars.
-- **Tokens come from the environment, never the config** (`GITBULK_BITBUCKET_TOKEN` /
-  `GITBULK_GITHUB_TOKEN`), so they cannot be committed by accident.
+- **Tokens never live in a project config.** They come from an environment variable
+  (`GITBULK_BITBUCKET_TOKEN` / `GITBULK_GITHUB_TOKEN`) or, optionally, a user-level store
+  written by `gitbulk auth login` (`~/.gitbulk/credentials.json`, mode `0600`, outside any repo).
+  The env var always takes precedence, and tokens are never logged.
 - **Process-tree timeouts.** A hanging git command (e.g. an interactive credential prompt) is
   killed together with its entire process tree (`taskkill /T` on Windows, process-group signals on
   POSIX) so a stuck child cannot hold the run hostage.

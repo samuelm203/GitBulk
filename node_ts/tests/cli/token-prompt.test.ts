@@ -35,26 +35,53 @@ describe('prTokenEnvVar', () => {
 });
 
 describe('ensurePrToken', () => {
+  // `readStored: () => undefined` macht die env/prompt-Tests hermetisch —
+  // unabhängig davon, ob auf dem Rechner echte Credentials gespeichert sind.
+  const noStored = (): undefined => undefined;
+
   it('is ok when the token env var is already set', async () => {
     const env = { GITBULK_GITHUB_TOKEN: 'gh-xyz' };
-    const res = await ensurePrToken('github', { interactive: false, env });
+    const res = await ensurePrToken('github', { interactive: false, env, readStored: noStored });
     assert.deepEqual(res, { ok: true });
   });
 
   it('treats a blank env var as missing', async () => {
     const env = { GITBULK_GITHUB_TOKEN: '   ' };
-    const res = await ensurePrToken('github', { interactive: false, env });
+    const res = await ensurePrToken('github', { interactive: false, env, readStored: noStored });
     assert.equal(res.ok, false);
   });
 
   it('errors (no prompt) in non-interactive mode when missing', async () => {
     const env: NodeJS.ProcessEnv = {};
-    const res = await ensurePrToken('bitbucket', { interactive: false, env });
+    const res = await ensurePrToken('bitbucket', { interactive: false, env, readStored: noStored });
     assert.equal(res.ok, false);
     if (!res.ok) {
       assert.match(res.error, /GITBULK_BITBUCKET_TOKEN/);
       assert.match(res.error, /required/i);
     }
+  });
+
+  it('uses a stored token when the env var is missing (env still wins if set)', async () => {
+    const env: NodeJS.ProcessEnv = {};
+    const res = await ensurePrToken('bitbucket', {
+      interactive: false,
+      env,
+      readStored: () => 'stored-bb',
+    });
+    assert.deepEqual(res, { ok: true });
+    // Der gespeicherte Token landet (getrimmt) in der Env für den Adapter.
+    assert.equal(env.GITBULK_BITBUCKET_TOKEN, 'stored-bb');
+  });
+
+  it('prefers the env var over a stored token', async () => {
+    const env: NodeJS.ProcessEnv = { GITBULK_BITBUCKET_TOKEN: 'from-env' };
+    const res = await ensurePrToken('bitbucket', {
+      interactive: false,
+      env,
+      readStored: () => 'stored-bb',
+    });
+    assert.deepEqual(res, { ok: true });
+    assert.equal(env.GITBULK_BITBUCKET_TOKEN, 'from-env');
   });
 
   it('prompts in interactive mode and stores the entered token in env', async () => {
@@ -63,6 +90,7 @@ describe('ensurePrToken', () => {
     const res = await ensurePrToken('github', {
       interactive: true,
       env,
+      readStored: noStored,
       prompt: (varName) => {
         askedVar = varName;
         return Promise.resolve('  entered-token  ');
@@ -79,6 +107,7 @@ describe('ensurePrToken', () => {
     const res = await ensurePrToken('github', {
       interactive: true,
       env,
+      readStored: noStored,
       prompt: () => Promise.resolve('   '),
     });
     assert.equal(res.ok, false);

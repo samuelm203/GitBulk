@@ -13,6 +13,7 @@ import { stdin, stderr } from 'node:process';
 import { Writable } from 'node:stream';
 
 import type { GitBulkConfig } from '../config/schema.js';
+import { readStoredToken } from './credentials.js';
 
 /** PR-Plattform (aus der Config). */
 export type PrPlatform = GitBulkConfig['prPlatform'];
@@ -31,6 +32,11 @@ export interface EnsureTokenOptions {
    * der interaktive Pfad ohne echtes Terminal getestet werden kann.
    */
   prompt?: (varName: string, platform: PrPlatform) => Promise<string>;
+  /**
+   * Liest einen persistent gespeicherten Token (`gitbulk auth login`).
+   * Default: `credentials.readStoredToken`. Injizierbar für Tests.
+   */
+  readStored?: (platform: PrPlatform) => string | undefined;
 }
 
 /**
@@ -76,12 +82,25 @@ export async function ensurePrToken(
     return { ok: true };
   }
 
+  // 2. Persistent gespeicherter Token (gitbulk auth login). Env behält Vorrang;
+  //    ein gefundener Token wird in die Env gelegt, damit der Adapter ihn liest.
+  const readStored =
+    opts.readStored ??
+    ((p: PrPlatform): string | undefined =>
+      p === 'bitbucket' || p === 'github' ? readStoredToken(p) : undefined);
+  const stored = readStored(platform);
+  if (stored !== undefined && stored.trim().length > 0) {
+    env[varName] = stored.trim();
+    return { ok: true };
+  }
+
   if (!opts.interactive) {
     return {
       ok: false,
       error:
         `Environment variable ${varName} is required for ${platform} PR creation. ` +
-        'Set it and re-run, or run in an interactive terminal to be prompted.',
+        `Set it, run \`gitbulk auth login --platform ${platform}\` to store it once, ` +
+        'or run in an interactive terminal to be prompted.',
     };
   }
 
@@ -103,7 +122,17 @@ export async function ensurePrToken(
  * readline/TTY-Eingabe ist im Test-Harness nicht reproduzierbar.
  */
 async function promptForTokenMasked(varName: string, platform: PrPlatform): Promise<string> {
-  // Stumme Senke: verschluckt das Echo der Eingabe vollständig.
+  return promptMaskedSecret(`\n${platform} token not found.\nEnter ${varName} (input hidden): `);
+}
+
+/**
+ * Liest eine Eingabe maskiert (kein Echo) vom Terminal — für Tokens/Secrets.
+ * Eine „stumme" Output-Senke verschluckt jeden Tastenanschlag; der Prompt-Text
+ * selbst geht nach stderr. Nur im echten Terminal aufrufen (interaktiv).
+ *
+ * Wiederverwendet von `gitbulk auth login` (siehe `auth.ts`).
+ */
+export async function promptMaskedSecret(promptLine: string): Promise<string> {
   const muted = new Writable({
     write(_chunk, _enc, cb): void {
       cb();
@@ -111,7 +140,7 @@ async function promptForTokenMasked(varName: string, platform: PrPlatform): Prom
   });
   const rl = createInterface({ input: stdin, output: muted, terminal: true });
   try {
-    stderr.write(`\n${platform} token not found.\nEnter ${varName} (input hidden): `);
+    stderr.write(promptLine);
     const answer = await rl.question('');
     stderr.write('\n');
     return answer;
