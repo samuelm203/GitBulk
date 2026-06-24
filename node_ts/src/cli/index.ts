@@ -11,7 +11,7 @@
  *   6. Runner ausführen
  *   7. Summary drucken, Exit-Code setzen
  *
- * Subkommandos: `init`, `auth`, `list-operations`. Alles andere ist der Bulk-Flow.
+ * Subkommandos: `init`, `template`, `auth`, `list-operations`. Alles andere ist der Bulk-Flow.
  *
  * Exit-Codes:
  *   0 — Alle RUs erfolgreich verarbeitet (auch wenn manche skipped sind)
@@ -45,6 +45,7 @@ import { runGui } from '../gui/index.js';
 import { runInitGenerator } from './init.js';
 import { runListOperations } from './list-operations.js';
 import { runAuth } from './auth.js';
+import { runTemplate } from './template.js';
 import { filterRus } from './filter-rus.js';
 import { handleSpecialFlags } from './special-flags.js';
 import { VERSION } from '../index.js';
@@ -55,6 +56,7 @@ const HELP = `gitbulk — Configurable CLI tool for bulk operations on Git repos
 Usage:
   gitbulk [options]                  Run the bulk flow (config -> per-RU git + PR)
   gitbulk init [options]             Generate an operations config or a code-change script
+  gitbulk template [--minimal]       Print a ready-to-edit config template (full by default)
   gitbulk auth <login|logout|status> Store/remove a PR token (~/.gitbulk/credentials.json)
   gitbulk list-operations [--json]   List the available declarative operations
 
@@ -75,6 +77,12 @@ Options:
 init options:
   -o, --output <path>    Output file path
   -f, --force            Overwrite the output file instead of auto-incrementing the name
+
+template options:
+      --full             Emit the full template with every field + comments (default)
+      --minimal          Emit only the required fields
+  -o, --output <path>    Write to a file instead of stdout
+  -f, --force            Overwrite the output file if it exists
 
 auth options:
       --platform <p>     Platform: bitbucket | github (required for login)
@@ -111,6 +119,27 @@ Usage:
   gitbulk auth status                                Show which tokens are available
 `;
 
+/** Hilfetext für `gitbulk template`. */
+const TEMPLATE_HELP = `gitbulk template — Print a ready-to-edit GitBulk config template (no prompts).
+
+Unlike \`gitbulk init\` (interactive), this just emits a schema-valid YAML config.
+The default is the full template (every field + comments); --minimal emits only
+the required fields. Tokens are NEVER part of the template — they come from env
+vars (GITBULK_BITBUCKET_TOKEN / GITBULK_GITHUB_TOKEN).
+
+Usage:
+  gitbulk template                 Print the full template to stdout
+  gitbulk template --minimal       Print only the required fields
+  gitbulk template -o gitbulk.yaml Write to a file (-f/--force to overwrite)
+
+Options:
+      --full             Emit the full template with every field + comments (default)
+      --minimal          Emit only the required fields
+  -o, --output <path>    Write to a file instead of stdout
+  -f, --force            Overwrite the output file if it exists
+      --no-color         Disable colored output
+`;
+
 
 /**
  * Parst die CLI-Argumente mit node:util parseArgs.
@@ -140,6 +169,8 @@ function parseCliArgs() {
       force: { type: 'boolean', short: 'f', default: false },
       json: { type: 'boolean', default: false },
       platform: { type: 'string' },
+      full: { type: 'boolean', default: false },
+      minimal: { type: 'boolean', default: false },
     },
   });
 }
@@ -233,7 +264,7 @@ async function main(): Promise<number> {
       process.stdout.write(INIT_HELP);
       return 0;
     }
-    const initInvalid = ['json', 'platform'].filter((o) => provided.has(o));
+    const initInvalid = ['json', 'platform', 'full', 'minimal'].filter((o) => provided.has(o));
     if (initInvalid.length > 0) {
       return usageError(`Option(s) ${initInvalid.map((o) => `--${o}`).join(', ')} are not valid for \`init\`.`);
     }
@@ -250,7 +281,7 @@ async function main(): Promise<number> {
       process.stdout.write(LIST_HELP);
       return 0;
     }
-    const listInvalid = ['output', 'force', 'platform'].filter((o) => provided.has(o));
+    const listInvalid = ['output', 'force', 'platform', 'full', 'minimal'].filter((o) => provided.has(o));
     if (listInvalid.length > 0) {
       return usageError(
         `Option(s) ${listInvalid.map((o) => `--${o}`).join(', ')} are not valid for \`list-operations\`.`,
@@ -263,12 +294,39 @@ async function main(): Promise<number> {
     }
     return runListOperations({ json: values.json ?? false, noColor: !useColor });
   }
+  if (subcommand === 'template') {
+    if (values.help) {
+      process.stdout.write(TEMPLATE_HELP);
+      return 0;
+    }
+    const templateInvalid = ['json', 'platform'].filter((o) => provided.has(o));
+    if (templateInvalid.length > 0) {
+      return usageError(
+        `Option(s) ${templateInvalid.map((o) => `--${o}`).join(', ')} are not valid for \`template\`.`,
+      );
+    }
+    const templateStray = bulkOnlyError('template');
+    if (templateStray !== undefined) return templateStray;
+    if (values.full && values.minimal) {
+      return usageError('`--full` and `--minimal` are mutually exclusive.');
+    }
+    if (positionals.length > 1) {
+      return usageError(`Unexpected argument "${positionals[1]}" for template.`);
+    }
+    const templateOpts: Parameters<typeof runTemplate>[0] = {
+      kind: values.minimal ? 'minimal' : 'full',
+      noColor: !useColor,
+    };
+    if (values.output !== undefined) templateOpts.outputPath = values.output;
+    if (values.force) templateOpts.force = true;
+    return runTemplate(templateOpts);
+  }
   if (subcommand === 'auth') {
     if (values.help) {
       process.stdout.write(AUTH_HELP);
       return 0;
     }
-    const authInvalid = ['output', 'force', 'json'].filter((o) => provided.has(o));
+    const authInvalid = ['output', 'force', 'json', 'full', 'minimal'].filter((o) => provided.has(o));
     if (authInvalid.length > 0) {
       return usageError(`Option(s) ${authInvalid.map((o) => `--${o}`).join(', ')} are not valid for \`auth\`.`);
     }
@@ -295,10 +353,12 @@ async function main(): Promise<number> {
   }
 
   // Subkommando-Optionen sind im Bulk-Flow ungültig (statt still ignoriert).
-  const strayOpts = ['output', 'force', 'json', 'platform'].filter((o) => provided.has(o));
+  const strayOpts = ['output', 'force', 'json', 'platform', 'full', 'minimal'].filter((o) =>
+    provided.has(o),
+  );
   if (strayOpts.length > 0) {
     return usageError(
-      `Option(s) ${strayOpts.map((o) => `--${o}`).join(', ')} are only valid for a subcommand (init / auth / list-operations).`,
+      `Option(s) ${strayOpts.map((o) => `--${o}`).join(', ')} are only valid for a subcommand (init / template / auth / list-operations).`,
     );
   }
 
