@@ -11,7 +11,14 @@
  */
 
 import type { GitHubConfig } from '../config/schema.js';
-import type { CreatePrInput, CreatePrResult, PullRequestAdapter } from './pr-adapter.js';
+import type {
+  CreatePrInput,
+  CreatePrResult,
+  PrLookupInput,
+  PrState,
+  PrStatusInfo,
+  PullRequestAdapter,
+} from './pr-adapter.js';
 import { getDefaultLogger, type Logger } from '../utils/logger.js';
 
 /** Default-API-Basis für GitHub.com. */
@@ -115,6 +122,56 @@ export class GitHubPrAdapter implements PullRequestAdapter {
     }
 
     return success;
+  }
+
+  /**
+   * Schlägt den PR-Status für einen Source-Branch nach (read-only, `gitbulk
+   * status`). Sucht über ALLE States und mappt den jüngsten Treffer.
+   *
+   * GET {apiBase}/repos/{owner}/{ru}/pulls?head={owner}:{branch}&state=all
+   *
+   * GitHub liefert `state` ∈ {open, closed} plus `merged_at`: ein geschlossener
+   * PR mit `merged_at != null` ist gemerged, sonst declined.
+   */
+  public async getPullRequestStatus(input: PrLookupInput): Promise<PrStatusInfo> {
+    const owner = input.workspace ?? this.config.owner;
+    const head = `${encodeURIComponent(owner)}:${encodeURIComponent(input.sourceBranch)}`;
+    const url = `${this.apiBase}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(input.ru)}/pulls?head=${head}&state=all&sort=created&direction=desc`;
+
+    let res: Response;
+    try {
+      res = await fetch(url, { method: 'GET', headers: this.headers() });
+    } catch (err) {
+      return { state: 'none', error: `network error: ${(err as Error).message}` };
+    }
+
+    const rawBody = await res.text();
+    if (res.status !== 200) {
+      return { state: 'none', error: `HTTP ${res.status}` };
+    }
+
+    let data: unknown;
+    try {
+      data = JSON.parse(rawBody);
+    } catch {
+      return { state: 'none', error: 'could not parse API response' };
+    }
+    if (!Array.isArray(data) || data.length === 0) return { state: 'none' };
+
+    const pr = data[0] as { number?: number; html_url?: string; state?: string; merged_at?: string | null };
+    let state: PrState;
+    if (pr.state === 'open') {
+      state = 'open';
+    } else {
+      state = pr.merged_at ? 'merged' : 'declined';
+    }
+
+    const info: PrStatusInfo = { state };
+    if (typeof pr.number === 'number') {
+      info.id = pr.number;
+      info.url = pr.html_url ?? `https://github.com/${owner}/${input.ru}/pull/${pr.number}`;
+    }
+    return info;
   }
 
   /**

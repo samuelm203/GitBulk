@@ -79,6 +79,47 @@ export type CreatePrResult =
     };
 
 /**
+ * Eingabe für einen reinen **Status-Lookup** (read-only, `gitbulk status`).
+ *
+ * Anders als `CreatePrInput` braucht es keinen Titel/Reviewer — nur, in welchem
+ * Repo nach welchem Source-Branch gesucht wird.
+ */
+export interface PrLookupInput {
+  /** RU-Name (Repository-Slug auf der Plattform). */
+  ru: string;
+  /** Optionaler Per-RU-Workspace/Owner-Override (wie bei `CreatePrInput`). */
+  workspace?: string;
+  /** Source-/Feature-Branch, nach dessen PR gesucht wird. */
+  sourceBranch: string;
+}
+
+/**
+ * Zustand eines Pull Requests aus Sicht der Status-Abfrage.
+ *
+ *   - `open`     → offener PR existiert
+ *   - `merged`   → PR wurde gemerged
+ *   - `declined` → PR wurde abgelehnt/geschlossen (Bitbucket DECLINED/SUPERSEDED,
+ *                  GitHub `closed` ohne Merge)
+ *   - `none`     → kein PR für diesen Source-Branch gefunden
+ */
+export type PrState = 'open' | 'merged' | 'declined' | 'none';
+
+/**
+ * Ergebnis eines PR-Status-Lookups. Result-Style: wirft NIE — ein API-/Netzwerk-
+ * fehler wird über `error` gemeldet (und `state` ist dann `none`).
+ */
+export interface PrStatusInfo {
+  /** Zustand des gefundenen PR (oder `none`). */
+  state: PrState;
+  /** PR-ID/-Nummer, falls einer existiert. */
+  id?: string | number;
+  /** Direkt-Link zum PR im Web-UI. */
+  url?: string;
+  /** Bei einem API-/Netzwerkfehler: menschen-lesbare Meldung. */
+  error?: string;
+}
+
+/**
  * Plattform-Adapter-Interface. Jede unterstützte Plattform (Bitbucket,
  * Azure DevOps, …) implementiert dieses Interface.
  */
@@ -95,6 +136,16 @@ export interface PullRequestAdapter {
    * @returns Erfolgs- oder Fehler-Result (wirft NIE)
    */
   createPullRequest(input: CreatePrInput): Promise<CreatePrResult>;
+
+  /**
+   * Schlägt den PR-Status für einen Source-Branch nach (read-only, `gitbulk
+   * status`). **Optional** — Plattformen ohne Implementierung (z. B. Azure)
+   * lassen die Methode weg; der Aufrufer meldet das dann sauber.
+   *
+   * @param input - Repo + Source-Branch
+   * @returns Status-Info (wirft NIE)
+   */
+  getPullRequestStatus?(input: PrLookupInput): Promise<PrStatusInfo>;
 }
 
 /**

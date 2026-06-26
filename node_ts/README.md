@@ -378,6 +378,12 @@ gitbulk template [options]      Print a ready-to-edit config template (no prompt
   -o, --output <path>    Write to a file instead of stdout
   -f, --force            Overwrite the output file if it exists
 
+gitbulk status [options]        Show the PR status of a config's RUs (read-only)
+  -c, --config <path>    Path to a config file
+  -m, --mode <mode>      "strict" or "hybrid" (default: hybrid)
+      --only <rus>       Only check these RUs (comma-separated subset)
+      --json             Output as JSON (machine-readable)
+
 gitbulk auth <login|logout|status>  Store/remove a PR token (~/.gitbulk/credentials.json)
       --platform <p>     bitbucket | github (required for login)
 
@@ -401,6 +407,38 @@ The **full** template (default) documents every field with its default; the **mi
 contains only the required fields so you can get going quickly. Both use an `operations:` block, so
 the emitted config is valid as-is without a separate script file. Tokens are **never** part of the
 template — they come from environment variables (or `gitbulk auth`, below).
+
+### Tracking a run (`gitbulk status`)
+
+After a bulk run you usually have many open pull requests. `gitbulk status` queries the platform
+for **the same config** and shows, per RU, the state of its PR — without touching any local repo or
+performing a single write:
+
+```bash
+gitbulk status --config gitbulk.yaml             # table of PR states for every RU
+gitbulk status --config gitbulk.yaml --only a,b  # restrict to a subset
+gitbulk status --config gitbulk.yaml --json      # machine-readable (for CI)
+```
+
+It re-derives the feature branch exactly like a run (`<ticket>-<branch>`) and looks the PR up by its
+source branch, so no run report or extra state is needed. Each RU is reported as **open**,
+**merged**, **declined** or **none** (no PR for that branch); API errors are listed per RU without
+aborting the rest. Token resolution is identical to a run: **environment variable → stored token →
+interactive prompt**.
+
+```text
+Ticket AKB-1234 · branch AKB-1234-feature/x · github · 3 RUs
+
+RU      PR    STATE   URL
+repo-a  #11   open    https://github.com/my-org/repo-a/pull/11
+repo-b  #12   merged  https://github.com/my-org/repo-b/pull/12
+repo-c  -     none
+
+Summary: 1 merged · 1 open · 0 declined · 1 none
+```
+
+(Bitbucket Cloud/Server and GitHub are supported; richer detail such as approvals and CI status is
+planned as a follow-up.)
 
 ### Storing a token (`gitbulk auth`)
 
