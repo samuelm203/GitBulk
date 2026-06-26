@@ -37,6 +37,11 @@ $env:GITBULK_GITHUB_TOKEN = '…'      # or GITBULK_BITBUCKET_TOKEN
 ./gitbulk.ps1 -Template -Minimal > gitbulk.yaml  # redirect to a file
 ./gitbulk.ps1 -Template -Output gitbulk.yaml -Force   # or write it directly
 
+# Store a PR token once (instead of exporting the env var every time):
+./gitbulk.ps1 -Auth login -Platform github   # prompts (hidden) and saves the token
+./gitbulk.ps1 -Auth status                   # shows which platforms have a token
+./gitbulk.ps1 -Auth logout -Platform github  # remove it again (omit -Platform = all)
+
 # Or via the module functions:
 Import-Module ./GitBulk.psd1
 Invoke-GitBulk -ConfigPath ./gitbulk.config.yaml -DryRun
@@ -47,6 +52,12 @@ Exit codes: `0` success · `1` a PR failed · `2` a fatal per-RU error · `3` se
 error (bad config, unknown `-Only` RU). The config format matches the Node version
 (see the repo root [README](../README.md)); the code change is defined via `script:`
 **or** a declarative `operations:` chain.
+
+**PR tokens** are never read from the config. At run time the resolution order is
+**environment variable → stored token → interactive prompt** (a `-DryRun` needs no
+token). The stored token lives outside any repo in `~/.gitbulk/credentials.json`
+(file mode `0600`; relocatable via `GITBULK_HOME`) and is written by
+`-Auth login`; tokens are never logged.
 
 ### Declarative operations (instead of a script)
 
