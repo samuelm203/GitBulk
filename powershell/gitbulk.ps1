@@ -36,10 +36,18 @@ param(
     [Parameter(Mandatory, ParameterSetName = 'Init')]
     [switch]$Init,
 
+    [Parameter(Mandatory, ParameterSetName = 'Template')]
+    [switch]$Template,
+
+    [Parameter(ParameterSetName = 'Template')]
+    [switch]$Minimal,
+
     [Parameter(ParameterSetName = 'Init')]
+    [Parameter(ParameterSetName = 'Template')]
     [string]$Output,
 
     [Parameter(ParameterSetName = 'Init')]
+    [Parameter(ParameterSetName = 'Template')]
     [switch]$Force,
 
     [switch]$NoColor
@@ -50,6 +58,17 @@ Import-Module (Join-Path $PSScriptRoot 'GitBulk.psd1') -Force
 if ($ListOperations) {
     Show-GitBulkOperationList -Json:$Json -NoColor:$NoColor
     exit 0
+}
+
+if ($Template) {
+    $kind = if ($Minimal) { 'minimal' } else { 'full' }
+    if ([string]::IsNullOrEmpty($Output)) {
+        # stdout-Modus: YAML auf den Success-Stream, damit `> datei.yaml` greift.
+        New-GitBulkTemplate -Kind $kind
+        exit 0
+    }
+    $code = Invoke-GitBulkTemplate -Kind $kind -OutputPath $Output -Force:$Force -NoColor:$NoColor
+    exit $code
 }
 
 if ($Init) {

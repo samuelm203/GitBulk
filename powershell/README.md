@@ -7,9 +7,10 @@ Node runtime required.
 > **Status:** functionally on par with the Node version. The end-to-end flow works
 > (config → run across RUs → commit/push → open PRs on GitHub/Bitbucket), all eight
 > declarative `operations:` are ported (file, npm, json and maven), discoverable via
-> `-ListOperations`, and an interactive `-Init` generator scaffolds an `operations:`
-> config. (The Node `init` can also emit a standalone script; the PowerShell port
-> only generates the operations config.) See [ROADMAP.md](./ROADMAP.md); the reference
+> `-ListOperations`, an interactive `-Init` generator scaffolds an `operations:`
+> config, and `-Template` prints a ready-to-edit config without prompts. (The Node
+> `init` can also emit a standalone script; the PowerShell port only generates the
+> operations config.) See [ROADMAP.md](./ROADMAP.md); the reference
 > implementation is [`../node_ts/`](../node_ts).
 
 ## Usage
@@ -29,6 +30,12 @@ $env:GITBULK_GITHUB_TOKEN = '…'      # or GITBULK_BITBUCKET_TOKEN
 # Scaffold a new operations config interactively:
 ./gitbulk.ps1 -Init                      # writes ./gitbulk.config.yaml
 ./gitbulk.ps1 -Init -Output ./my.yaml -Force
+
+# Print a ready-to-edit config template (no prompts):
+./gitbulk.ps1 -Template                          # full template to stdout
+./gitbulk.ps1 -Template -Minimal                 # only the required fields
+./gitbulk.ps1 -Template -Minimal > gitbulk.yaml  # redirect to a file
+./gitbulk.ps1 -Template -Output gitbulk.yaml -Force   # or write it directly
 
 # Or via the module functions:
 Import-Module ./GitBulk.psd1
