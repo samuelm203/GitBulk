@@ -67,6 +67,16 @@ function Invoke-GitBulk {
         $config.rus = $filtered
     }
 
+    # ── 2b. Token-Guard: env > gespeicherter Token > interaktive Abfrage ──
+    # Im Dry-Run wird kein Token verlangt (keine PR-API-Aufrufe).
+    $interactive = -not [Console]::IsInputRedirected
+    $tokenResult = Resolve-GitBulkToken -Platform ([string]$config.prPlatform) `
+        -Interactive:$interactive -DryRun:([bool]$config.dryRun)
+    if (-not $tokenResult.Ok) {
+        writeErrLine $tokenResult.Error
+        return 3
+    }
+
     # ── 3./4. Lauf + Report ──────────────────────────────────────────
     # Unerwartete Fehler werden zu Exit 2 (fatal) — der CLI-Einstiegspunkt
     # soll nie unkontrolliert werfen.

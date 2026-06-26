@@ -42,6 +42,14 @@ param(
     [Parameter(ParameterSetName = 'Template')]
     [switch]$Minimal,
 
+    [Parameter(Mandatory, ParameterSetName = 'Auth')]
+    [ValidateSet('login', 'logout', 'status')]
+    [string]$Auth,
+
+    [Parameter(ParameterSetName = 'Auth')]
+    [ValidateSet('bitbucket', 'github')]
+    [string]$Platform,
+
     [Parameter(ParameterSetName = 'Init')]
     [Parameter(ParameterSetName = 'Template')]
     [string]$Output,
@@ -68,6 +76,15 @@ if ($Template) {
         exit 0
     }
     $code = Invoke-GitBulkTemplate -Kind $kind -OutputPath $Output -Force:$Force -NoColor:$NoColor
+    exit $code
+}
+
+if ($Auth) {
+    $interactive = -not [Console]::IsInputRedirected
+    $authArgs = @{ Action = $Auth; Interactive = $interactive; NoColor = [bool]$NoColor }
+    # -Platform nur durchreichen, wenn gesetzt — sonst lehnt das ValidateSet '' ab.
+    if (-not [string]::IsNullOrEmpty($Platform)) { $authArgs.Platform = $Platform }
+    $code = Invoke-GitBulkAuth @authArgs
     exit $code
 }
 
