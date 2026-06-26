@@ -37,6 +37,7 @@ after(async () => {
 
 beforeEach(() => {
   mock.requests.length = 0;
+  mock.clearRoutes();
   mock.setDefault({ status: 200, body: {} });
 });
 
@@ -152,6 +153,90 @@ describe('GitHubPrAdapter.getPullRequestStatus', () => {
     mock.enqueue({ status: 200, body: [] });
     const info = await gh().getPullRequestStatus(lookup);
     assert.equal(info.state, 'none');
+  });
+});
+
+// ── v2: Approvals + CI-Rollup (best-effort, parallele Calls → Routing) ──
+describe('getPullRequestStatus enrichment (approvals + CI)', () => {
+  it('GitHub: counts latest-per-user approvals and rolls up check-runs', async () => {
+    mock.route('/pulls?', { status: 200, body: [{ number: 1, state: 'open', html_url: 'o', head: { sha: 'sha1' } }] });
+    mock.route('/pulls/1/reviews', {
+      status: 200,
+      body: [
+        { user: { login: 'a' }, state: 'COMMENTED' },
+        { user: { login: 'a' }, state: 'APPROVED' }, // jüngstes Review von a gewinnt
+        { user: { login: 'b' }, state: 'APPROVED' },
+        { user: { login: 'c' }, state: 'CHANGES_REQUESTED' },
+      ],
+    });
+    mock.route('/commits/sha1/check-runs', {
+      status: 200,
+      body: { check_runs: [{ status: 'completed', conclusion: 'success' }] },
+    });
+    const info = await gh().getPullRequestStatus(lookup);
+    assert.equal(info.state, 'open');
+    assert.deepEqual(info.approvals, { approved: 2 });
+    assert.equal(info.ci, 'passed');
+  });
+
+  it('GitHub: a failing check-run wins the rollup', async () => {
+    mock.route('/pulls?', { status: 200, body: [{ number: 2, state: 'open', html_url: 'o', head: { sha: 'sha2' } }] });
+    mock.route('/commits/sha2/check-runs', {
+      status: 200,
+      body: { check_runs: [{ status: 'completed', conclusion: 'success' }, { status: 'completed', conclusion: 'failure' }] },
+    });
+    const info = await gh().getPullRequestStatus(lookup);
+    assert.equal(info.ci, 'failed');
+  });
+
+  it('GitHub: enrichment failure does not flag the row as error', async () => {
+    mock.route('/pulls?', { status: 200, body: [{ number: 3, state: 'open', html_url: 'o', head: { sha: 'sha3' } }] });
+    mock.route('/pulls/3/reviews', { status: 500, body: {} });
+    mock.route('/commits/sha3/check-runs', { status: 500, body: {} });
+    const info = await gh().getPullRequestStatus(lookup);
+    assert.equal(info.state, 'open');
+    assert.equal(info.error, undefined);
+    assert.equal(info.approvals, undefined);
+    assert.equal(info.ci, undefined);
+  });
+
+  it('Bitbucket Cloud: approvals from PR detail + statuses rollup', async () => {
+    mock.route('/pullrequests?', {
+      status: 200,
+      body: { values: [{ id: 5, state: 'OPEN', links: { html: { href: 'u' } }, source: { commit: { hash: 'abc' } } }] },
+    });
+    mock.route('/pullrequests/5', {
+      status: 200,
+      body: { participants: [{ role: 'REVIEWER', approved: true }, { role: 'REVIEWER', approved: false }, { role: 'PARTICIPANT', approved: true }] },
+    });
+    mock.route('/commit/abc/statuses', { status: 200, body: { values: [{ state: 'SUCCESSFUL' }] } });
+    const info = await bbCloud().getPullRequestStatus(lookup);
+    assert.equal(info.state, 'open');
+    assert.deepEqual(info.approvals, { approved: 2, required: 2 });
+    assert.equal(info.ci, 'passed');
+  });
+
+  it('Bitbucket Server: approvals from list reviewers + build-status running', async () => {
+    const adapter = new BitbucketPrAdapter(
+      { workspace: 'PROJ', apiVariant: 'server', apiBaseUrl: mock.baseUrl, targetBranch: 'master', reviewers: [] },
+      'pat',
+      silentLogger,
+    );
+    mock.route('/pull-requests?', {
+      status: 200,
+      body: {
+        values: [{
+          id: 9, state: 'OPEN', links: { self: [{ href: 'su' }] },
+          fromRef: { latestCommit: 'def' },
+          reviewers: [{ approved: true }, { approved: false }, { approved: true }],
+        }],
+      },
+    });
+    mock.route('/build-status/1.0/commits/def', { status: 200, body: { values: [{ state: 'INPROGRESS' }] } });
+    const info = await adapter.getPullRequestStatus(lookup);
+    assert.equal(info.state, 'open');
+    assert.deepEqual(info.approvals, { approved: 2, required: 3 });
+    assert.equal(info.ci, 'running');
   });
 });
 

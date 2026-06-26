@@ -12,8 +12,10 @@
 
 import type { GitHubConfig } from '../config/schema.js';
 import type {
+  CiState,
   CreatePrInput,
   CreatePrResult,
+  PrApprovals,
   PrLookupInput,
   PrState,
   PrStatusInfo,
@@ -158,7 +160,13 @@ export class GitHubPrAdapter implements PullRequestAdapter {
     }
     if (!Array.isArray(data) || data.length === 0) return { state: 'none' };
 
-    const pr = data[0] as { number?: number; html_url?: string; state?: string; merged_at?: string | null };
+    const pr = data[0] as {
+      number?: number;
+      html_url?: string;
+      state?: string;
+      merged_at?: string | null;
+      head?: { sha?: string };
+    };
     let state: PrState;
     if (pr.state === 'open') {
       state = 'open';
@@ -170,8 +178,81 @@ export class GitHubPrAdapter implements PullRequestAdapter {
     if (typeof pr.number === 'number') {
       info.id = pr.number;
       info.url = pr.html_url ?? `https://github.com/${owner}/${input.ru}/pull/${pr.number}`;
+
+      // Approvals + CI sind best-effort: ein Fehler hier lässt den Status-Eintrag
+      // unverändert (keine `error`-Markierung) — die Kern-Info steht ja schon.
+      const [approvals, ci] = await Promise.all([
+        this.fetchApprovals(owner, input.ru, pr.number),
+        pr.head?.sha ? this.fetchCi(owner, input.ru, pr.head.sha) : Promise.resolve(undefined),
+      ]);
+      if (approvals !== undefined) info.approvals = approvals;
+      if (ci !== undefined) info.ci = ci;
     }
     return info;
+  }
+
+  /**
+   * Zählt Approvals (best-effort). Pro Reviewer zählt nur das jüngste Review;
+   * gezählt werden die mit Endstand `APPROVED`. GitHub kennt keine harte
+   * „required"-Zahl → bleibt offen.
+   *
+   * GET {apiBase}/repos/{owner}/{ru}/pulls/{number}/reviews
+   */
+  private async fetchApprovals(
+    owner: string,
+    ru: string,
+    prNumber: number,
+  ): Promise<PrApprovals | undefined> {
+    const url = `${this.apiBase}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(ru)}/pulls/${prNumber}/reviews`;
+    try {
+      const res = await fetch(url, { method: 'GET', headers: this.headers() });
+      if (res.status !== 200) return undefined;
+      const reviews = JSON.parse(await res.text()) as Array<{ user?: { login?: string }; state?: string }>;
+      if (!Array.isArray(reviews)) return undefined;
+      // Jüngstes Review pro Login gewinnt (Array ist chronologisch).
+      const latestByUser = new Map<string, string>();
+      for (const r of reviews) {
+        const login = r.user?.login;
+        if (login && typeof r.state === 'string') latestByUser.set(login, r.state);
+      }
+      let approved = 0;
+      for (const st of latestByUser.values()) {
+        if (st === 'APPROVED') approved++;
+      }
+      return { approved };
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
+   * Rollt die GitHub-Checks des Source-Commits zusammen (best-effort).
+   *
+   * GET {apiBase}/repos/{owner}/{ru}/commits/{sha}/check-runs
+   */
+  private async fetchCi(owner: string, ru: string, sha: string): Promise<CiState | undefined> {
+    const url = `${this.apiBase}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(ru)}/commits/${encodeURIComponent(sha)}/check-runs`;
+    try {
+      const res = await fetch(url, { method: 'GET', headers: this.headers() });
+      if (res.status !== 200) return undefined;
+      const data = JSON.parse(await res.text()) as {
+        check_runs?: Array<{ status?: string; conclusion?: string | null }>;
+      };
+      const runs = data.check_runs;
+      if (!Array.isArray(runs) || runs.length === 0) return 'none';
+      const failingConclusions = new Set(['failure', 'timed_out', 'cancelled', 'action_required']);
+      let anyRunning = false;
+      let anySuccess = false;
+      for (const run of runs) {
+        if (run.conclusion && failingConclusions.has(run.conclusion)) return 'failed';
+        if (run.status !== 'completed') anyRunning = true;
+        if (run.conclusion === 'success') anySuccess = true;
+      }
+      if (anyRunning) return 'running';
+      return anySuccess ? 'passed' : 'none';
+    } catch {
+      return undefined;
+    }
   }
 
   /**
