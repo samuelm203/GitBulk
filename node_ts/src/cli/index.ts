@@ -11,7 +11,7 @@
  *   6. Runner ausführen
  *   7. Summary drucken, Exit-Code setzen
  *
- * Subkommandos: `init`, `template`, `auth`, `list-operations`. Alles andere ist der Bulk-Flow.
+ * Subkommandos: `init`, `template`, `status`, `auth`, `list-operations`. Alles andere ist der Bulk-Flow.
  *
  * Exit-Codes:
  *   0 — Alle RUs erfolgreich verarbeitet (auch wenn manche skipped sind)
@@ -46,6 +46,7 @@ import { runInitGenerator } from './init.js';
 import { runListOperations } from './list-operations.js';
 import { runAuth } from './auth.js';
 import { runTemplate } from './template.js';
+import { runStatus } from './status.js';
 import { filterRus } from './filter-rus.js';
 import { handleSpecialFlags } from './special-flags.js';
 import { VERSION } from '../index.js';
@@ -57,6 +58,7 @@ Usage:
   gitbulk [options]                  Run the bulk flow (config -> per-RU git + PR)
   gitbulk init [options]             Generate an operations config or a code-change script
   gitbulk template [--minimal]       Print a ready-to-edit config template (full by default)
+  gitbulk status [--only ...] [--json]  Show the PR status of a config's RUs (read-only)
   gitbulk auth <login|logout|status> Store/remove a PR token (~/.gitbulk/credentials.json)
   gitbulk list-operations [--json]   List the available declarative operations
 
@@ -137,6 +139,26 @@ Options:
       --minimal          Emit only the required fields
   -o, --output <path>    Write to a file instead of stdout
   -f, --force            Overwrite the output file if it exists
+      --no-color         Disable colored output
+`;
+
+/** Hilfetext für `gitbulk status`. */
+const STATUS_HELP = `gitbulk status — Show the PR status for the RUs of a config (read-only).
+
+Resolves the same feature branch as a run (<ticket>-<branch>) and looks up each
+RU's pull request on the platform. Performs NO local git or write operations.
+Token resolution is the same as a run: env var > stored token > interactive prompt.
+
+Usage:
+  gitbulk status --config gitbulk.yaml            Table of PR states for all RUs
+  gitbulk status --config gitbulk.yaml --only a,b Restrict to a subset of RUs
+  gitbulk status --config gitbulk.yaml --json     Machine-readable output (for CI)
+
+Options:
+  -c, --config <path>    Path to a config file
+  -m, --mode <mode>      Config mode: "strict" or "hybrid" (default: hybrid)
+      --only <rus>       Only check these RUs (comma-separated subset)
+      --json             Output as JSON (machine-readable)
       --no-color         Disable colored output
 `;
 
@@ -347,6 +369,38 @@ async function main(): Promise<number> {
     if (values.platform !== undefined) authOpts.platform = values.platform;
     return runAuth(authOpts);
   }
+  if (subcommand === 'status') {
+    if (values.help) {
+      process.stdout.write(STATUS_HELP);
+      return 0;
+    }
+    // `status` nutzt config/mode/only (read-only), aber nicht die Schreib-/View-
+    // Optionen des Bulk-Flows oder die anderer Subkommandos.
+    const statusInvalid = [
+      'output', 'force', 'platform', 'full', 'minimal',
+      'tui', 'gui', 'dry-run', 'deep-log', 'log-level',
+    ].filter((o) => provided.has(o));
+    if (statusInvalid.length > 0) {
+      return usageError(
+        `Option(s) ${statusInvalid.map((o) => `--${o}`).join(', ')} are not valid for \`status\`.`,
+      );
+    }
+    if (positionals.length > 1) {
+      return usageError(`Unexpected argument "${positionals[1]}" for status.`);
+    }
+    const statusMode = values.mode ?? 'hybrid';
+    if (statusMode !== 'strict' && statusMode !== 'hybrid') {
+      return usageError(`Invalid --mode "${statusMode}". Allowed: strict, hybrid`);
+    }
+    const statusOpts: Parameters<typeof runStatus>[0] = {
+      mode: statusMode,
+      json: values.json ?? false,
+      noColor: !useColor,
+    };
+    if (values.config !== undefined) statusOpts.configPath = values.config;
+    if (values.only !== undefined) statusOpts.only = values.only;
+    return runStatus(statusOpts);
+  }
   if (subcommand !== undefined) {
     printError(`Unknown command "${subcommand}". Run "gitbulk --help" for usage.`, useColor);
     return 3;
@@ -358,7 +412,7 @@ async function main(): Promise<number> {
   );
   if (strayOpts.length > 0) {
     return usageError(
-      `Option(s) ${strayOpts.map((o) => `--${o}`).join(', ')} are only valid for a subcommand (init / template / auth / list-operations).`,
+      `Option(s) ${strayOpts.map((o) => `--${o}`).join(', ')} are only valid for a subcommand (init / template / status / auth / list-operations).`,
     );
   }
 

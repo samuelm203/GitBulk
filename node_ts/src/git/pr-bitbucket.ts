@@ -24,8 +24,31 @@
 import { Buffer } from 'node:buffer';
 
 import type { BitbucketConfig } from '../config/schema.js';
-import type { CreatePrInput, CreatePrResult, PullRequestAdapter } from './pr-adapter.js';
+import type {
+  CreatePrInput,
+  CreatePrResult,
+  PrLookupInput,
+  PrState,
+  PrStatusInfo,
+  PullRequestAdapter,
+} from './pr-adapter.js';
 import { getDefaultLogger, type Logger } from '../utils/logger.js';
+
+/**
+ * Mappt Bitbuckets PR-`state` (Cloud & Server identisch in Großschreibung) auf
+ * den plattform-agnostischen {@link PrState}.
+ */
+function mapBitbucketState(raw: unknown): PrState {
+  switch (String(raw).toUpperCase()) {
+    case 'OPEN':
+      return 'open';
+    case 'MERGED':
+      return 'merged';
+    // DECLINED / SUPERSEDED (und alles andere Geschlossene) → declined.
+    default:
+      return 'declined';
+  }
+}
 
 /**
  * Baut den Authorization-Header.
@@ -150,6 +173,66 @@ export class BitbucketPrAdapter implements PullRequestAdapter {
     }
 
     return this.parseFailure(response.status, rawBody);
+  }
+
+  /**
+   * Schlägt den PR-Status für einen Source-Branch nach (read-only, `gitbulk
+   * status`). Sucht über ALLE States (nicht nur OPEN), nimmt den jüngsten
+   * Treffer und mappt dessen Zustand.
+   *
+   * Cloud:  GET /repositories/{ws}/{repo}/pullrequests?q=source.branch.name="<b>"&sort=-created_on
+   * Server: GET /rest/api/1.0/projects/{key}/repos/{repo}/pull-requests
+   *           ?at=refs/heads/<b>&direction=OUTGOING&state=ALL
+   */
+  public async getPullRequestStatus(input: PrLookupInput): Promise<PrStatusInfo> {
+    const ws = input.workspace ?? this.config.workspace;
+    const url = this.cloud
+      ? `${this.apiBase}/repositories/${encodeURIComponent(ws)}/${encodeURIComponent(input.ru)}/pullrequests?q=${encodeURIComponent(`source.branch.name="${input.sourceBranch}"`)}&sort=-created_on`
+      : `${this.apiBase}/rest/api/1.0/projects/${encodeURIComponent(ws)}/repos/${encodeURIComponent(input.ru)}/pull-requests?state=ALL&at=${encodeURIComponent(`refs/heads/${input.sourceBranch}`)}&direction=OUTGOING`;
+
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method: 'GET',
+        headers: { Authorization: this.authHeader, Accept: 'application/json' },
+      });
+    } catch (err) {
+      return { state: 'none', error: `network error: ${(err as Error).message}` };
+    }
+
+    const rawBody = await res.text();
+    if (res.status !== 200) {
+      return { state: 'none', error: `HTTP ${res.status}` };
+    }
+
+    let data: { values?: Array<Record<string, unknown>> };
+    try {
+      data = JSON.parse(rawBody) as { values?: Array<Record<string, unknown>> };
+    } catch {
+      return { state: 'none', error: 'could not parse API response' };
+    }
+
+    const first = data.values?.[0];
+    if (!first) return { state: 'none' };
+
+    const state = mapBitbucketState(first.state);
+    const idValue = first.id;
+    const id = typeof idValue === 'number' || typeof idValue === 'string' ? idValue : undefined;
+    let prUrl: string | undefined;
+    if (this.cloud) {
+      const links = first.links as { html?: { href?: string } } | undefined;
+      prUrl =
+        links?.html?.href ??
+        (id !== undefined ? `https://bitbucket.org/${ws}/${input.ru}/pull-requests/${id}` : undefined);
+    } else {
+      const links = first.links as { self?: Array<{ href?: string }> } | undefined;
+      prUrl = links?.self?.[0]?.href;
+    }
+
+    const info: PrStatusInfo = { state };
+    if (id !== undefined) info.id = id;
+    if (prUrl !== undefined) info.url = prUrl;
+    return info;
   }
 
   /**

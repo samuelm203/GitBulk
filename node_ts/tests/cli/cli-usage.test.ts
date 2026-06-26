@@ -66,4 +66,24 @@ describe('CLI usage hygiene (subcommand vs bulk-flow options)', () => {
     assert.equal(r.status, 3);
     assert.match(r.stderr, /--gui/);
   });
+
+  it('prints help for `status` (exit 0)', () => {
+    const r = runCli(['status', '--help']);
+    assert.equal(r.status, 0);
+    assert.match(r.stdout, /gitbulk status/);
+  });
+
+  it('rejects view/write options for `status` with exit 3', () => {
+    const r = runCli(['status', '--tui', '--no-color']);
+    assert.equal(r.status, 3);
+    assert.match(r.stderr, /--tui/);
+    assert.match(r.stderr, /not valid for `status`/);
+  });
+
+  it('rejects subcommand-only options for `status` with exit 3', () => {
+    const r = runCli(['status', '--output', 'x.yaml', '--no-color']);
+    assert.equal(r.status, 3);
+    assert.match(r.stderr, /--output/);
+    assert.match(r.stderr, /not valid for `status`/);
+  });
 });
