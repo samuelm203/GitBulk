@@ -422,23 +422,26 @@ gitbulk status --config gitbulk.yaml --json      # machine-readable (for CI)
 
 It re-derives the feature branch exactly like a run (`<ticket>-<branch>`) and looks the PR up by its
 source branch, so no run report or extra state is needed. Each RU is reported as **open**,
-**merged**, **declined** or **none** (no PR for that branch); API errors are listed per RU without
-aborting the rest. Token resolution is identical to a run: **environment variable → stored token →
-interactive prompt**.
+**merged**, **declined** or **none** (no PR for that branch), together with its **approvals** and a
+**CI** rollup (passed / failed / running / none). API errors are listed per RU without aborting the
+rest. Token resolution is identical to a run: **environment variable → stored token → interactive
+prompt**.
 
 ```text
 Ticket AKB-1234 · branch AKB-1234-feature/x · github · 3 RUs
 
-RU      PR    STATE   URL
-repo-a  #11   open    https://github.com/my-org/repo-a/pull/11
-repo-b  #12   merged  https://github.com/my-org/repo-b/pull/12
-repo-c  -     none
+RU      PR    STATE   APPROVALS  CI       URL
+repo-a  #11   open    2/3        passed   https://github.com/my-org/repo-a/pull/11
+repo-b  #12   merged  2          passed   https://github.com/my-org/repo-b/pull/12
+repo-c  -     none    -          -
 
 Summary: 1 merged · 1 open · 0 declined · 1 none
 ```
 
-(Bitbucket Cloud/Server and GitHub are supported; richer detail such as approvals and CI status is
-planned as a follow-up.)
+Approvals show `approved/required` where the platform exposes a required count (Bitbucket reviewers)
+and just the approved count otherwise (GitHub). Approvals and CI are **best-effort**: if those extra
+API calls fail, the columns stay empty but the core state is still shown. Bitbucket Cloud/Server and
+GitHub are supported.
 
 ### Storing a token (`gitbulk auth`)
 

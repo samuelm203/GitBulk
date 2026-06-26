@@ -46,6 +46,14 @@ export interface MockServer {
   requests: LoggedRequest[];
   /** Plant eine zukünftige Antwort (wird beim nächsten Request konsumiert) */
   enqueue(response: QueuedResponse): void;
+  /**
+   * Routet Requests, deren URL `urlSubstring` enthält, auf eine feste Antwort —
+   * unabhängig von der Reihenfolge (für parallele Calls, z. B. Status-Enrichment).
+   * Routen haben Vorrang vor der Queue und werden nicht konsumiert.
+   */
+  route(urlSubstring: string, response: QueuedResponse): void;
+  /** Entfernt alle registrierten Routen (z. B. in `beforeEach`). */
+  clearRoutes(): void;
   /** Setzt die Default-Antwort für leere Queue (sonst 200 ohne Body) */
   setDefault(response: QueuedResponse): void;
   /** Schließt den Server */
@@ -71,6 +79,7 @@ function readBody(req: IncomingMessage): Promise<string> {
  */
 export async function startMockServer(): Promise<MockServer> {
   const responseQueue: QueuedResponse[] = [];
+  const routes: Array<{ match: string; response: QueuedResponse }> = [];
   let defaultResponse: QueuedResponse = { status: 200, body: {} };
   const requests: LoggedRequest[] = [];
 
@@ -83,14 +92,17 @@ export async function startMockServer(): Promise<MockServer> {
       // nicht-JSON Body ist erlaubt; bleibt als String
     }
 
+    const url = req.url ?? '';
     requests.push({
       method: req.method ?? 'GET',
-      url: req.url ?? '',
+      url,
       headers: req.headers,
       body: parsedBody,
     });
 
-    const response = responseQueue.shift() ?? defaultResponse;
+    // Routen haben Vorrang (URL-basiert, ordnungsunabhängig); sonst Queue/Default.
+    const matched = routes.find((r) => url.includes(r.match));
+    const response = matched?.response ?? responseQueue.shift() ?? defaultResponse;
     res.statusCode = response.status;
     res.setHeader('Content-Type', 'application/json');
     for (const [k, v] of Object.entries(response.headers ?? {})) {
@@ -113,6 +125,12 @@ export async function startMockServer(): Promise<MockServer> {
     requests,
     enqueue(response) {
       responseQueue.push(response);
+    },
+    route(urlSubstring, response) {
+      routes.push({ match: urlSubstring, response });
+    },
+    clearRoutes() {
+      routes.length = 0;
     },
     setDefault(response) {
       defaultResponse = response;

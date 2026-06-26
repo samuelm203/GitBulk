@@ -52,6 +52,28 @@ describe('formatStatusReport', () => {
     assert.doesNotMatch(out, /error/);
   });
 
+  it('renders APPROVALS and CI columns (approved/required and approved-only)', () => {
+    const r: PrStatusReport = {
+      ticket: 'AKB-1',
+      sourceBranch: 'AKB-1-feature/x',
+      platform: 'github',
+      results: [
+        { ru: 'repo-a', state: 'open', id: 1, url: 'u1', approvals: { approved: 2, required: 3 }, ci: 'passed' },
+        { ru: 'repo-b', state: 'open', id: 2, url: 'u2', approvals: { approved: 1 }, ci: 'failed' },
+        { ru: 'repo-c', state: 'none' },
+      ],
+      totals: { open: 2, merged: 0, declined: 0, none: 1, errored: 0 },
+    };
+    const out = formatStatusReport(r, { noColor: true });
+    assert.match(out, /APPROVALS/);
+    assert.match(out, /\bCI\b/);
+    // required vorhanden → "2/3"; required offen → nur "1".
+    assert.match(out, /repo-a.*#1.*open.*2\/3.*passed/);
+    assert.match(out, /repo-b.*#2.*open.*1\s.*failed/);
+    // Zeile ohne PR: alle Detailspalten sind "-".
+    assert.match(out, /repo-c.*none.*-.*-/);
+  });
+
   it('produces no ANSI escapes with noColor, but does with color', () => {
     const plain = formatStatusReport(report, { noColor: true });
     const colored = formatStatusReport(report, { noColor: false });

@@ -105,6 +105,27 @@ export interface PrLookupInput {
 export type PrState = 'open' | 'merged' | 'declined' | 'none';
 
 /**
+ * Aggregierter CI-/Build-Zustand des PR-Source-Commits.
+ *
+ *   - `passed`  → mindestens ein Status, alle erfolgreich
+ *   - `failed`  → mindestens ein fehlgeschlagener Status
+ *   - `running` → kein Fehler, aber mindestens einer läuft noch
+ *   - `none`    → keine CI-Stati gemeldet (oder nicht ermittelbar)
+ */
+export type CiState = 'passed' | 'failed' | 'running' | 'none';
+
+/** Approval-Zähler eines PR. */
+export interface PrApprovals {
+  /** Anzahl bereits erteilter Approvals. */
+  approved: number;
+  /**
+   * Anzahl erwarteter Reviewer, falls die Plattform das hergibt
+   * (Bitbucket: Reviewer-Liste). GitHub liefert keine harte Vorgabe → bleibt offen.
+   */
+  required?: number;
+}
+
+/**
  * Ergebnis eines PR-Status-Lookups. Result-Style: wirft NIE — ein API-/Netzwerk-
  * fehler wird über `error` gemeldet (und `state` ist dann `none`).
  */
@@ -115,6 +136,10 @@ export interface PrStatusInfo {
   id?: string | number;
   /** Direkt-Link zum PR im Web-UI. */
   url?: string;
+  /** Approvals (best-effort; fehlt, wenn nicht ermittelbar). */
+  approvals?: PrApprovals;
+  /** CI-/Build-Rollup (best-effort; fehlt, wenn nicht ermittelbar). */
+  ci?: CiState;
   /** Bei einem API-/Netzwerkfehler: menschen-lesbare Meldung. */
   error?: string;
 }

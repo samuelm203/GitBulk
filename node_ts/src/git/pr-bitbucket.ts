@@ -25,8 +25,10 @@ import { Buffer } from 'node:buffer';
 
 import type { BitbucketConfig } from '../config/schema.js';
 import type {
+  CiState,
   CreatePrInput,
   CreatePrResult,
+  PrApprovals,
   PrLookupInput,
   PrState,
   PrStatusInfo,
@@ -48,6 +50,31 @@ function mapBitbucketState(raw: unknown): PrState {
     default:
       return 'declined';
   }
+}
+
+/**
+ * Rollt Bitbucket-Build-/Commit-Stati zu einem {@link CiState} zusammen
+ * (Cloud `/statuses` und Server `build-status` nutzen dieselben State-Strings).
+ */
+function rollupBitbucketBuild(states: string[]): CiState {
+  if (states.length === 0) return 'none';
+  if (states.some((s) => s === 'FAILED' || s === 'STOPPED')) return 'failed';
+  if (states.some((s) => s === 'INPROGRESS')) return 'running';
+  if (states.some((s) => s === 'SUCCESSFUL')) return 'passed';
+  return 'none';
+}
+
+/**
+ * Approvals aus der Server-Reviewer-Liste (im Listen-Objekt enthalten).
+ * `reviewers: [{ approved }]` → approved-Zähler, required = Reviewer-Anzahl.
+ */
+function approvalsFromServerReviewers(raw: unknown): PrApprovals | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  let approved = 0;
+  for (const r of raw) {
+    if (r && typeof r === 'object' && (r as { approved?: unknown }).approved === true) approved++;
+  }
+  return { approved, required: raw.length };
 }
 
 /**
@@ -232,7 +259,86 @@ export class BitbucketPrAdapter implements PullRequestAdapter {
     const info: PrStatusInfo = { state };
     if (id !== undefined) info.id = id;
     if (prUrl !== undefined) info.url = prUrl;
+
+    // Approvals + CI sind best-effort: Fehler hier lassen den Status-Eintrag
+    // unverändert (keine `error`-Markierung). Den Source-Commit liefert das
+    // Listen-Objekt bereits (Cloud `source.commit.hash`, Server `fromRef.latestCommit`).
+    const sha = this.cloud
+      ? (first.source as { commit?: { hash?: string } } | undefined)?.commit?.hash
+      : (first.fromRef as { latestCommit?: string } | undefined)?.latestCommit;
+
+    const approvalsPromise: Promise<PrApprovals | undefined> = this.cloud
+      ? id !== undefined
+        ? this.fetchApprovalsCloud(ws, input.ru, id)
+        : Promise.resolve(undefined)
+      : Promise.resolve(approvalsFromServerReviewers(first.reviewers));
+
+    const [approvals, ci] = await Promise.all([
+      approvalsPromise,
+      sha ? this.fetchCi(ws, input.ru, sha) : Promise.resolve(undefined),
+    ]);
+    if (approvals !== undefined) info.approvals = approvals;
+    if (ci !== undefined) info.ci = ci;
     return info;
+  }
+
+  /**
+   * Zählt Approvals eines Cloud-PR (best-effort) über das PR-Detail.
+   *
+   * GET /repositories/{ws}/{repo}/pullrequests/{id}
+   * → `participants: [{ approved, role }]` (REVIEWER-Rollen = erwartete Reviewer).
+   */
+  private async fetchApprovalsCloud(
+    ws: string,
+    ru: string,
+    id: string | number,
+  ): Promise<PrApprovals | undefined> {
+    const url = `${this.apiBase}/repositories/${encodeURIComponent(ws)}/${encodeURIComponent(ru)}/pullrequests/${encodeURIComponent(String(id))}`;
+    try {
+      const res = await fetch(url, {
+        method: 'GET',
+        headers: { Authorization: this.authHeader, Accept: 'application/json' },
+      });
+      if (res.status !== 200) return undefined;
+      const data = JSON.parse(await res.text()) as {
+        participants?: Array<{ approved?: boolean; role?: string }>;
+      };
+      if (!Array.isArray(data.participants)) return undefined;
+      let approved = 0;
+      let required = 0;
+      for (const p of data.participants) {
+        if (p.role === 'REVIEWER') required++;
+        if (p.approved === true) approved++;
+      }
+      return required > 0 ? { approved, required } : { approved };
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
+   * Rollt die Build-Stati des Source-Commits zusammen (best-effort).
+   *
+   * Cloud:  GET /repositories/{ws}/{repo}/commit/{sha}/statuses
+   * Server: GET /rest/build-status/1.0/commits/{sha}
+   * Beide liefern `values: [{ state }]` mit SUCCESSFUL/FAILED/INPROGRESS/STOPPED.
+   */
+  private async fetchCi(ws: string, ru: string, sha: string): Promise<CiState | undefined> {
+    const url = this.cloud
+      ? `${this.apiBase}/repositories/${encodeURIComponent(ws)}/${encodeURIComponent(ru)}/commit/${encodeURIComponent(sha)}/statuses`
+      : `${this.apiBase}/rest/build-status/1.0/commits/${encodeURIComponent(sha)}`;
+    try {
+      const res = await fetch(url, {
+        method: 'GET',
+        headers: { Authorization: this.authHeader, Accept: 'application/json' },
+      });
+      if (res.status !== 200) return undefined;
+      const data = JSON.parse(await res.text()) as { values?: Array<{ state?: string }> };
+      const states = (data.values ?? []).map((v) => String(v.state));
+      return rollupBitbucketBuild(states);
+    } catch {
+      return undefined;
+    }
   }
 
   /**

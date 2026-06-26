@@ -51,6 +51,20 @@ function stateColorFn(label: string): (s: string) => string {
   }
 }
 
+/** Liefert die Farbfunktion für ein CI-Label. */
+function ciColorFn(label: string): (s: string) => string {
+  switch (label) {
+    case 'passed':
+      return colors.green;
+    case 'failed':
+      return colors.red;
+    case 'running':
+      return colors.yellow;
+    default:
+      return colors.gray; // none / -
+  }
+}
+
 /** Rechts mit Leerzeichen auf Breite `w` auffüllen (für Tabellen-Spalten). */
 function pad(s: string, w: number): string {
   return s.length >= w ? s : s + ' '.repeat(w - s.length);
@@ -68,10 +82,19 @@ export function formatStatusReport(
 
   const rows = report.results.map((r) => {
     const isError = r.error !== undefined;
+    let approvals = '-';
+    if (!isError && r.approvals) {
+      approvals =
+        r.approvals.required !== undefined
+          ? `${r.approvals.approved}/${r.approvals.required}`
+          : String(r.approvals.approved);
+    }
     return {
       ru: r.ru,
       pr: r.id !== undefined ? `#${r.id}` : '-',
       stateLabel: isError ? 'error' : r.state,
+      approvals,
+      ci: isError ? '-' : (r.ci ?? '-'),
       note: isError ? `(error: ${r.error ?? ''})` : (r.url ?? ''),
     };
   });
@@ -79,18 +102,28 @@ export function formatStatusReport(
   const wRu = Math.max('RU'.length, ...rows.map((x) => x.ru.length));
   const wPr = Math.max('PR'.length, ...rows.map((x) => x.pr.length));
   const wState = Math.max('STATE'.length, ...rows.map((x) => x.stateLabel.length));
+  const wAppr = Math.max('APPROVALS'.length, ...rows.map((x) => x.approvals.length));
+  const wCi = Math.max('CI'.length, ...rows.map((x) => x.ci.length));
 
   const lines: string[] = [];
   lines.push(
     `Ticket ${report.ticket} · branch ${report.sourceBranch} · ${report.platform} · ${report.results.length} RUs`,
   );
   lines.push('');
-  lines.push(dim(`${pad('RU', wRu)}  ${pad('PR', wPr)}  ${pad('STATE', wState)}  URL`));
+  lines.push(
+    dim(
+      `${pad('RU', wRu)}  ${pad('PR', wPr)}  ${pad('STATE', wState)}  ${pad('APPROVALS', wAppr)}  ${pad('CI', wCi)}  URL`,
+    ),
+  );
 
   for (const x of rows) {
     const stateCellPlain = pad(x.stateLabel, wState);
     const stateCell = useColor ? stateColorFn(x.stateLabel)(stateCellPlain) : stateCellPlain;
-    lines.push(`${pad(x.ru, wRu)}  ${pad(x.pr, wPr)}  ${stateCell}  ${x.note}`.trimEnd());
+    const ciCellPlain = pad(x.ci, wCi);
+    const ciCell = useColor ? ciColorFn(x.ci)(ciCellPlain) : ciCellPlain;
+    lines.push(
+      `${pad(x.ru, wRu)}  ${pad(x.pr, wPr)}  ${stateCell}  ${pad(x.approvals, wAppr)}  ${ciCell}  ${x.note}`.trimEnd(),
+    );
   }
 
   const t = report.totals;
