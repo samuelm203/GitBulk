@@ -322,15 +322,20 @@ Paths are always relative to the repository and **may not escape it** (no absolu
 through the available operations, prompts only for the parameters each one needs (derived from its
 schema), and writes one of:
 
-1. a ready-to-run **YAML config** (the `operations:` block plus the remaining required fields), or
+1. a ready-to-run **YAML config** (the `operations:` block plus the remaining required fields),
 2. a standalone **code-change script** you can edit freely — in **JavaScript (`.mjs`)** or
-   **TypeScript (`.ts`)** (you pick the language up front).
+   **TypeScript (`.ts`)** (you pick the language up front), or
+3. **both** — a script **and** a config that runs it via the `script:` field. Use this when you
+   want the convenience of clicking the operations together but the freedom to hand-edit the
+   resulting script afterwards. The config references the script by its path relative to where you
+   run `gitbulk` (e.g. `script: gitbulk/gitbulk-change.mjs`).
 
 It then asks for the **file name** (with a sensible default) and writes the file into a fixed
 **`gitbulk/`** directory (created if missing). If the target already exists, GitBulk does **not**
 overwrite it — it picks the next free name instead (`gitbulk.config.yaml` → `gitbulk.config2.yaml`
 → `gitbulk.config3.yaml` …), so repeated runs never clobber earlier configs. Pass `--force` to
-overwrite, or `--output <path>` to write to an explicit location.
+overwrite, or `--output <path>` to write to an explicit location. (In **both** mode, `--output`
+names the config and the script is written next to it.)
 
 ```bash
 gitbulk init                       # interactive; writes into ./gitbulk/ (asks for the file name)

@@ -12,7 +12,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { parse as parseYaml } from 'yaml';
@@ -23,6 +23,7 @@ import { generateScript } from '../../src/cli/script-generator.js';
 import { generateYamlConfig, buildConfigObject } from '../../src/cli/config-generator.js';
 import { GitBulkConfigSchema } from '../../src/config/schema.js';
 import { validateOutputFileName, resolveOutputPath, nextFreePath } from '../../src/cli/init.js';
+import { chooseOneTwoThree } from '../../src/cli/operation-prompts.js';
 import type { Interface } from 'node:readline/promises';
 
 /** Minimaler readline-Mock: liefert die Antworten der Reihe nach. */
@@ -110,6 +111,57 @@ describe('config-generator', () => {
     const parsed = parseYaml(yaml) as { commitMessage: string; prSummary: string };
     assert.equal(parsed.commitMessage, 'feat: add dep');
     assert.equal(parsed.prSummary, 'Add dependency');
+  });
+});
+
+// ── config-generator: script-Variante (beides-Modus) ────────────────
+
+describe('config-generator (script variant)', () => {
+  const scriptBase = {
+    rus: ['repo-a'],
+    ticket: 'AKB-1',
+    branch: 'feature/x',
+    commitMessage: 'msg',
+    prSummary: 'summary',
+    createPrOnError: false,
+    prPlatform: 'bitbucket' as const,
+    bitbucketWorkspace: 'ws',
+  };
+
+  it('emits a script field instead of operations', () => {
+    const cfg = buildConfigObject({ ...scriptBase, script: 'gitbulk/gitbulk-change.mjs' });
+    assert.equal(cfg.script, 'gitbulk/gitbulk-change.mjs');
+    assert.ok(!('operations' in cfg), 'must not emit operations when script is set');
+  });
+
+  it('produces a script-based YAML that validates against the real schema', () => {
+    const ws = mkdtempSync(join(tmpdir(), 'gitbulk-both-'));
+    const scriptPath = join(ws, 'gitbulk-change.mjs');
+    writeFileSync(scriptPath, '// noop\n');
+    // Pfad als POSIX-String (so wie der beides-Modus ihn in die Config schreibt).
+    const scriptRel = scriptPath.split(sep).join('/');
+
+    const yaml = generateYamlConfig({ ...scriptBase, script: scriptRel });
+    assert.match(yaml, /script:/);
+    assert.doesNotMatch(yaml, /operations:/);
+
+    const parsed = parseYaml(yaml) as unknown;
+    const result = GitBulkConfigSchema.safeParse(parsed);
+    assert.equal(result.success, true, JSON.stringify(result, null, 2));
+  });
+});
+
+describe('chooseOneTwoThree', () => {
+  it('accepts 1, 2 and 3 (trimmed)', () => {
+    for (const v of ['1', '2', '3', ' 2 ']) {
+      assert.equal(chooseOneTwoThree(v).ok, true, `expected "${v}" to be accepted`);
+    }
+  });
+
+  it('rejects anything else', () => {
+    for (const v of ['0', '4', 'x', '']) {
+      assert.equal(chooseOneTwoThree(v).ok, false, `expected "${v}" to be rejected`);
+    }
   });
 });
 

@@ -31,6 +31,16 @@ export function chooseOneOrTwo(
     : { ok: false, error: 'Please enter 1 or 2.' };
 }
 
+/** Validator für eine "1, 2 oder 3"-Auswahl (für Eingangsfragen). */
+export function chooseOneTwoThree(
+  raw: string,
+): { ok: true; value: '1' | '2' | '3' } | { ok: false; error: string } {
+  const t = raw.trim();
+  return t === '1' || t === '2' || t === '3'
+    ? { ok: true, value: t }
+    : { ok: false, error: 'Please enter 1, 2 or 3.' };
+}
+
 /**
  * Fragt einen einzelnen Operation-Parameter ab.
  * @returns den Wert, oder `undefined` wenn das (optionale) Feld übersprungen wird.
