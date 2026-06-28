@@ -56,7 +56,7 @@ const HELP = `gitbulk — Configurable CLI tool for bulk operations on Git repos
 
 Usage:
   gitbulk [options]                  Run the bulk flow (config -> per-RU git + PR)
-  gitbulk init [options]             Generate an operations config or a code-change script
+  gitbulk init [options]             Generate an operations config, a script, or both
   gitbulk template [--minimal]       Print a ready-to-edit config template (full by default)
   gitbulk status [--only ...] [--json]  Show the PR status of a config's RUs (read-only)
   gitbulk auth <login|logout|status> Store/remove a PR token (~/.gitbulk/credentials.json)
@@ -93,10 +93,16 @@ Exit codes: 0 ok | 1 a PR failed | 2 a fatal per-RU error | 3 setup error | 130 
 `;
 
 /** Hilfetext für `gitbulk init`. */
-const INIT_HELP = `gitbulk init — Generate an operations config or a standalone .mjs/.ts code-change script.
+const INIT_HELP = `gitbulk init — Generate an operations config, a standalone .mjs/.ts script, or both.
+
+Interactively pick one of:
+  1. a config with declarative operations (YAML)
+  2. a standalone code-change script (.mjs/.ts)
+  3. both — a script plus a config that runs it via "script:"
 
 Options:
-  -o, --output <path>   Output file path
+  -o, --output <path>   Output file path (in "both" mode this names the config; the
+                        script is written next to it)
   -f, --force           Overwrite the output file instead of auto-incrementing the name
       --no-color        Disable colored output
 `;

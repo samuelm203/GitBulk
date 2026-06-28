@@ -2,7 +2,8 @@
  * Baut aus den interaktiv gesammelten Werten eine lauffähige GitBulk-Config
  * (für `gitbulk init`, Config-Modus) und serialisiert sie nach YAML.
  *
- * Bewusst KEINE Skript-Felder — die `operations:` ersetzen das `script:`.
+ * Der Code-Change ist GENAU EINES von `operations:` (deklarativ) ODER `script:`
+ * (Pfad zu einem generierten/eigenen Skript — der „beides"-Modus von `init`).
  */
 
 import { Document, Scalar } from 'yaml';
@@ -14,8 +15,13 @@ export interface ConfigGeneratorInput {
   commitMessage: string;
   prSummary: string;
   createPrOnError: boolean;
-  /** Die zusammengeklickten Operationen (inkl. `type`). */
-  operations: Array<{ type: string } & Record<string, unknown>>;
+  /**
+   * Die zusammengeklickten Operationen (inkl. `type`). GENAU EINES von
+   * `operations` / `script` setzen — `script` hat Vorrang, wenn beide gesetzt sind.
+   */
+  operations?: Array<{ type: string } & Record<string, unknown>>;
+  /** Pfad zu einem Code-Change-Skript (Alternative zu `operations`). */
+  script?: string;
   /** PR-Plattform (aktuell genügt Bitbucket). */
   prPlatform: 'bitbucket' | 'azure-devops';
   /** Bitbucket-Workspace (Pflicht bei prPlatform === 'bitbucket'). */
@@ -27,11 +33,14 @@ export interface ConfigGeneratorInput {
  * Reihenfolge der Schlüssel ist bewusst lesefreundlich gewählt.
  */
 export function buildConfigObject(input: ConfigGeneratorInput): Record<string, unknown> {
+  // Code-Change: `script` hat Vorrang (beides-Modus), sonst `operations`.
+  const codeChange =
+    input.script !== undefined ? { script: input.script } : { operations: input.operations ?? [] };
   const config: Record<string, unknown> = {
     rus: input.rus,
     ticket: input.ticket,
     branch: input.branch,
-    operations: input.operations,
+    ...codeChange,
     commitMessage: input.commitMessage,
     prSummary: input.prSummary,
     createPrOnError: input.createPrOnError,

@@ -3,8 +3,9 @@
  *
  * Führt per Prompts durch die verfügbaren Operationen (`collectOperations`),
  * fragt deren Parameter anhand der Zod-Schemas ab und erzeugt am Ende WAHLWEISE:
- *   1. eine lauffähige YAML-Config mit `operations:`-Block, oder
- *   2. ein eigenständiges `.mjs`/`.ts`-Code-Change-Skript (frei anpassbar).
+ *   1. eine lauffähige YAML-Config mit `operations:`-Block,
+ *   2. ein eigenständiges `.mjs`/`.ts`-Code-Change-Skript (frei anpassbar), oder
+ *   3. BEIDES — ein Skript plus eine Config, die es über `script:` ausführt.
  *
  * Die Operationen-Sammel-Prompts liegen in `cli/operation-prompts.ts` (geteilt
  * mit dem interaktiven Lauf-Modus); die Code-/Config-Erzeugung in eigenen,
@@ -14,7 +15,7 @@
 import { createInterface, type Interface } from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
 import { existsSync, writeFileSync, mkdirSync } from 'node:fs';
-import { resolve, dirname, basename, extname, join } from 'node:path';
+import { resolve, dirname, basename, extname, join, relative, sep } from 'node:path';
 
 import * as colors from '../utils/colors.js';
 
@@ -27,7 +28,12 @@ import {
   validateYesNo,
 } from '../utils/validators.js';
 import { promptUntilValid } from './prompts.js';
-import { collectOperations, chooseOneOrTwo, type CollectedOp } from './operation-prompts.js';
+import {
+  collectOperations,
+  chooseOneOrTwo,
+  chooseOneTwoThree,
+  type CollectedOp,
+} from './operation-prompts.js';
 import {
   generateScript,
   type ScriptOperation,
@@ -144,11 +150,12 @@ export async function runInitGenerator(opts: InitOptions = {}): Promise<number> 
     output.write(colors.bold('\nWhat do you want to create?\n'));
     output.write(`  ${colors.green('1')}. A config with declarative operations (YAML)\n`);
     output.write(`  ${colors.green('2')}. A standalone code-change script\n`);
-    const kind = await promptUntilValid(rl, 'Choose (1/2):', chooseOneOrTwo);
+    output.write(`  ${colors.green('3')}. Both — a script + a config that runs it\n`);
+    const kind = await promptUntilValid(rl, 'Choose (1/2/3):', chooseOneTwoThree);
 
-    // ── 2) Bei Skript: Sprache wählen ────────────────────────────
+    // ── 2) Bei Skript (auch im beides-Modus): Sprache wählen ─────
     let language: ScriptLanguage = 'js';
-    if (kind === '2') {
+    if (kind === '2' || kind === '3') {
       output.write(colors.bold('\nScript language?\n'));
       output.write(`  ${colors.green('1')}. JavaScript (.mjs)\n`);
       output.write(`  ${colors.green('2')}. TypeScript (.ts)\n`);
@@ -160,9 +167,8 @@ export async function runInitGenerator(opts: InitOptions = {}): Promise<number> 
     const operations = await collectOperations(rl);
 
     // ── 4) Exportieren ───────────────────────────────────────────
-    if (kind === '2') {
-      return await exportScript(rl, opts, operations, language);
-    }
+    if (kind === '2') return await exportScript(rl, opts, operations, language);
+    if (kind === '3') return await exportBoth(rl, opts, operations, language);
     return await exportConfig(rl, opts, operations);
   } finally {
     rl.close();
@@ -203,12 +209,19 @@ async function exportScript(
   return 0;
 }
 
-/** Schreibt die YAML-Config. */
-async function exportConfig(
-  rl: Interface,
-  opts: InitOptions,
-  operations: CollectedOp[],
-): Promise<number> {
+/** Interaktiv erfragte Config-Felder (ohne den Code-Change-Teil). */
+interface PromptedConfigFields {
+  rus: string[];
+  ticket: string;
+  branch: string;
+  commitMessage: string;
+  prSummary: string;
+  createPrOnError: boolean;
+  bitbucketWorkspace: string;
+}
+
+/** Fragt die gemeinsamen Config-Felder ab (geteilt von Config- und beides-Modus). */
+async function promptConfigFields(rl: Interface): Promise<PromptedConfigFields> {
   output.write(colors.bold('\nNow the remaining config fields:\n'));
 
   const rus = await promptUntilValid(rl, 'List of RUs, separated by commas:', validateRuList);
@@ -230,15 +243,20 @@ async function exportConfig(
         : { ok: false as const, error: 'Workspace must not be empty.' },
   );
 
+  return { rus, ticket, branch, commitMessage, prSummary, createPrOnError, bitbucketWorkspace };
+}
+
+/** Schreibt die YAML-Config (Operationen-Variante). */
+async function exportConfig(
+  rl: Interface,
+  opts: InitOptions,
+  operations: CollectedOp[],
+): Promise<number> {
+  const f = await promptConfigFields(rl);
+
   const yaml = generateYamlConfig({
-    rus,
-    ticket,
-    branch,
-    commitMessage,
-    prSummary,
-    createPrOnError,
+    ...f,
     prPlatform: 'bitbucket',
-    bitbucketWorkspace,
     operations: operations.map((o) => ({ type: o.type, ...o.params })),
   });
 
@@ -248,5 +266,72 @@ async function exportConfig(
   writeFileSync(target, yaml);
   output.write(colors.green(`\n✓ Wrote config: ${target}\n`));
   output.write(colors.gray(`  Run it via: gitbulk --config ${target}\n`));
+  return 0;
+}
+
+/**
+ * Schreibt BEIDES: ein generiertes Code-Change-Skript UND eine Config, die es
+ * über das `script:`-Feld ausführt (statt `operations:`).
+ *
+ * Pfad-Logik: ohne `--output` werden zwei Dateinamen erfragt (beide in
+ * `gitbulk/`). Mit `--output` benennt dieser die CONFIG; das Skript wird mit
+ * dem Default-Namen daneben abgelegt. Der `script:`-Wert ist der Skript-Pfad
+ * RELATIV ZUM CWD — so löst GitBulk ihn zur Laufzeit auf (wie eine handgepflegte
+ * Config; `gitbulk` wird üblicherweise aus dem Repo-Root gestartet).
+ */
+async function exportBoth(
+  rl: Interface,
+  opts: InitOptions,
+  operations: CollectedOp[],
+  language: ScriptLanguage,
+): Promise<number> {
+  const scriptOps: ScriptOperation[] = operations.map((o) => ({ type: o.type, params: o.params }));
+  const { code, unsupported } = generateScript(scriptOps, language);
+
+  if (unsupported.length > 0) {
+    process.stderr.write(
+      colors.yellow(
+        `\nNote: no script generator for: ${[...new Set(unsupported)].join(', ')}. ` +
+          'These are left as TODO comments in the script.\n',
+      ),
+    );
+  }
+
+  const scriptDefault = language === 'ts' ? 'gitbulk-change.ts' : 'gitbulk-change.mjs';
+
+  // Zielpfade bestimmen.
+  let scriptTarget: string;
+  let configTarget: string;
+  if (opts.outputPath !== undefined) {
+    configTarget = opts.force ? resolve(opts.outputPath) : nextFreePath(resolve(opts.outputPath));
+    const sibling = join(dirname(configTarget), scriptDefault);
+    scriptTarget = opts.force ? sibling : nextFreePath(sibling);
+  } else {
+    scriptTarget = await resolveOutputPath(rl, opts, scriptDefault);
+    configTarget = await resolveOutputPath(rl, opts, 'gitbulk.config.yaml');
+  }
+
+  // Skript schreiben.
+  mkdirSync(dirname(scriptTarget), { recursive: true });
+  writeFileSync(scriptTarget, code, { mode: 0o755 });
+  output.write(colors.green(`\n✓ Wrote script: ${scriptTarget}\n`));
+
+  // Skript-Pfad relativ zum CWD (POSIX-Separatoren für portable YAML).
+  const scriptRel = relative(process.cwd(), scriptTarget).split(sep).join('/');
+
+  // Config-Felder erfragen und Config mit `script:` schreiben.
+  const f = await promptConfigFields(rl);
+  const yaml = generateYamlConfig({ ...f, prPlatform: 'bitbucket', script: scriptRel });
+
+  mkdirSync(dirname(configTarget), { recursive: true });
+  writeFileSync(configTarget, yaml);
+  output.write(colors.green(`\n✓ Wrote config: ${configTarget}\n`));
+  output.write(colors.gray(`  The config runs the script via "script: ${scriptRel}" — edit it freely.\n`));
+  output.write(colors.gray(`  Run it via: gitbulk --config ${configTarget}\n`));
+  if (language === 'ts') {
+    output.write(
+      colors.gray('  TypeScript runs via tsx (npm i -D tsx) or Node >= 22.6 automatically.\n'),
+    );
+  }
   return 0;
 }
