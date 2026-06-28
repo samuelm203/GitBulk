@@ -11,7 +11,10 @@ function New-GitHubPullRequest {
         [Parameter(Mandatory)][string]$Ru,
         [Parameter(Mandatory)][string]$SourceBranch,
         [Parameter(Mandatory)][string]$Title,
-        [string]$Description = ''
+        [string]$Description = '',
+
+        # Per-RU-Owner-Override (Vorrang vor GitHubConfig.owner).
+        [string]$Workspace = ''
     )
 
     $apiBase = if ($GitHubConfig.Contains('apiBaseUrl') -and $GitHubConfig.apiBaseUrl) {
@@ -19,7 +22,7 @@ function New-GitHubPullRequest {
     } else {
         'https://api.github.com'
     }
-    $owner = [string]$GitHubConfig.owner
+    $owner = if (-not [string]::IsNullOrEmpty($Workspace)) { $Workspace } else { [string]$GitHubConfig.owner }
     $targetBranch = [string]$GitHubConfig.targetBranch
     $url = "$apiBase/repos/$owner/$Ru/pulls"
 

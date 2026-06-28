@@ -118,6 +118,25 @@ repo) marks the whole change as failed → the commit message becomes
 `ERROR WHILE CODE CHANGE` (a PR is opened only with `createPrOnError: true`), exactly
 like a script exiting non-zero.
 
+### Multiple workspaces in one run
+
+By default every RU uses the global `bitbucket.workspace` (or `github.owner`). To
+process repos from **different** workspaces/owners in a single run, write an entry
+as `{ repo, workspace }` instead of a plain name — the override flows into the repo
+path, the clone URL and the PR target:
+
+```yaml
+rus:
+  - repo-a                              # uses the global workspace below
+  - { repo: repo-b, workspace: other-ws }   # overrides just for repo-b
+bitbucket:
+  workspace: my-workspace               # default for all RUs without an override
+```
+
+With an override the repo is checked out under `workspaceDir/<workspace>/<repo>` so
+that same-named repos from different workspaces don't collide locally. The workspace
+must be a plain segment (no `/`, `\` or `..`).
+
 ## Requirements
 
 - **PowerShell 7.2+** (`pwsh`), cross-platform (Windows / Linux / macOS)

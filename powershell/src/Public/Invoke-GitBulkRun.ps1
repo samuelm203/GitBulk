@@ -34,10 +34,13 @@ function Invoke-GitBulkRun {
         $ru = $_
         $cfg = $using:Config
         $modPath = $using:modulePath
+        # Optionaler Per-RU-Workspace-Override (Bitbucket-Workspace / GitHub-Owner).
+        $ws = ''
+        if ($cfg.Contains('ruWorkspaces') -and $cfg.ruWorkspaces.Contains($ru)) { $ws = [string]$cfg.ruWorkspaces[$ru] }
         try {
             Import-Module $modPath -Force -ErrorAction Stop
             # Private Funktion → im Modul-Scope aufrufen.
-            & (Get-Module GitBulk) { param($c, $r) Invoke-GitBulkRu -Config $c -Ru $r } $cfg $ru
+            & (Get-Module GitBulk) { param($c, $r, $w) Invoke-GitBulkRu -Config $c -Ru $r -Workspace $w } $cfg $ru $ws
         } catch {
             [pscustomobject]@{
                 Ru = $ru; Branch = ''; Outcome = 'fatal'; CodeChangeOk = $false

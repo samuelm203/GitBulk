@@ -22,14 +22,22 @@ function Invoke-GitBulkRu {
         $Config,
 
         [Parameter(Mandatory)]
-        [string]$Ru
+        [string]$Ru,
+
+        # Optionaler Per-RU-Workspace-Override (Bitbucket-Workspace / GitHub-Owner).
+        # Leer = globaler Wert aus der Sub-Config.
+        [string]$Workspace = ''
     )
 
+    $hasWs = -not [string]::IsNullOrEmpty($Workspace)
     $timeout = [int]$Config.commandTimeoutMs
     $skipHooks = [bool]$Config.skipHooks
     $sourceBranch = [string]$Config.sourceBranch
     $workspaceDir = if ($Config.Contains('workspaceDir')) { [string]$Config.workspaceDir } else { (Get-Location).Path }
-    $repoPath = Join-Path $workspaceDir $Ru
+    # Mit Workspace-Override liegt das Repo in einem eigenen Unterordner je
+    # Workspace (workspaceDir/<workspace>/<ru>) — so kollidieren gleichnamige
+    # Repo-Slugs aus verschiedenen Workspaces lokal nicht.
+    $repoPath = if ($hasWs) { Join-Path (Join-Path $workspaceDir $Workspace) $Ru } else { Join-Path $workspaceDir $Ru }
     $branchName = "$($Config.ticket)-$($Config.branch)"
 
     $result = [ordered]@{
@@ -49,7 +57,14 @@ function Invoke-GitBulkRu {
     # ── 1. Repo sicherstellen ────────────────────────────────────────
     if (-not (Test-Path -LiteralPath (Join-Path $repoPath '.git'))) {
         if ($Config.cloneIfMissing -and $Config.Contains('cloneBaseUrl')) {
-            $cloneUrl = "$(([string]$Config.cloneBaseUrl).TrimEnd('/'))/$Ru"
+            # Ohne Override: cloneBaseUrl + RU. Mit Override wird der Workspace in
+            # den Host der cloneBaseUrl eingesetzt: <origin>/<workspace>/<ru>.
+            $cloneUrl = if ($hasWs) {
+                $origin = ([uri]([string]$Config.cloneBaseUrl)).GetLeftPart([System.UriPartial]::Authority)
+                "$origin/$Workspace/$Ru"
+            } else {
+                "$(([string]$Config.cloneBaseUrl).TrimEnd('/'))/$Ru"
+            }
             $r = Invoke-Git -Arguments @('clone', $cloneUrl, $repoPath) -Cwd $workspaceDir -TimeoutMs $timeout
             if ($r.ExitCode -ne 0) { return (fail "clone failed: $($r.Stderr.Trim())") }
         } else {
@@ -162,7 +177,7 @@ function Invoke-GitBulkRu {
     }
 
     $pr = New-GitBulkPullRequest -Config $Config -Ru $Ru -SourceBranch $branchName `
-        -Title ([string]$Config.prSummary) -Description ([string]$Config.prSummary)
+        -Title ([string]$Config.prSummary) -Description ([string]$Config.prSummary) -Workspace $Workspace
     if ($pr.Ok) {
         $result.Outcome = 'pr-created'
         $result.PrUrl = [string]$pr.Url

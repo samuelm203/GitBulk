@@ -6,14 +6,52 @@
 #   [pscustomobject]@{ Ok = [bool]; Value = <normalisiert>; Error = [string] }
 
 function Test-GitBulkRuList {
-    # Akzeptiert komma-separierten String ODER Array; trimmt, entfernt Leere.
+    # Akzeptiert: komma-separierten String, Array von Namen ODER Array mit
+    # gemischten Einträgen (Name ODER { repo, workspace }). Liefert die RU-Namen
+    # plus eine optionale Workspace-Map (Per-RU-Override für Bitbucket/GitHub),
+    # damit RUs aus mehreren Workspaces in EINEM Lauf landen können.
     param([AllowNull()] $InputObject)
+
     $raw = if ($InputObject -is [string]) { $InputObject -split ',' } else { @($InputObject) }
-    $cleaned = @($raw | ForEach-Object { "$_".Trim() } | Where-Object { $_.Length -gt 0 })
-    if ($cleaned.Count -eq 0) {
-        return [pscustomobject]@{ Ok = $false; Value = $null; Error = 'Error: RU list is missing' }
+
+    $names = [System.Collections.Generic.List[string]]::new()
+    $workspaces = @{}
+
+    foreach ($entry in $raw) {
+        $repo = $null
+        $ws = $null
+
+        if ($entry -is [string]) {
+            $repo = $entry.Trim()
+        } elseif ($entry -is [System.Collections.IDictionary]) {
+            $repo = "$($entry['repo'])".Trim()
+            if (-not [string]::IsNullOrWhiteSpace([string]$entry['workspace'])) { $ws = ([string]$entry['workspace']).Trim() }
+        } elseif ($null -ne $entry -and ($entry.PSObject.Properties.Name -contains 'repo')) {
+            $repo = "$($entry.repo)".Trim()
+            $wsProp = $entry.PSObject.Properties['workspace']
+            if ($wsProp -and -not [string]::IsNullOrWhiteSpace([string]$wsProp.Value)) { $ws = ([string]$wsProp.Value).Trim() }
+        } else {
+            $repo = "$entry".Trim()
+        }
+
+        if ([string]::IsNullOrEmpty($repo)) { continue }
+
+        if ($null -ne $ws) {
+            # Workspace landet in Pfaden und URLs → Path-Traversal/Injection abwehren.
+            if ($ws -match '[\\/]' -or $ws.Contains('..')) {
+                return [pscustomobject]@{ Ok = $false; Value = $null; Workspaces = @{}
+                    Error = "Error: invalid workspace '$ws' for RU '$repo' (no '/', '\' or '..')"
+                }
+            }
+            $workspaces[$repo] = $ws
+        }
+        $names.Add($repo)
     }
-    [pscustomobject]@{ Ok = $true; Value = $cleaned; Error = $null }
+
+    if ($names.Count -eq 0) {
+        return [pscustomobject]@{ Ok = $false; Value = $null; Workspaces = @{}; Error = 'Error: RU list is missing' }
+    }
+    [pscustomobject]@{ Ok = $true; Value = $names.ToArray(); Workspaces = $workspaces; Error = $null }
 }
 
 function ConvertTo-GitBulkBranchName {

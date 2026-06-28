@@ -19,7 +19,13 @@ function ConvertTo-GitBulkConfig {
 
     # ── Pflichtfelder ────────────────────────────────────────────────
     $r = Test-GitBulkRuList $Raw['rus']
-    if ($r.Ok) { $cfg.rus = $r.Value } else { $errors.Add($r.Error) }
+    if ($r.Ok) {
+        $cfg.rus = $r.Value
+        # Per-RU-Workspace-Overrides nur ablegen, wenn welche angegeben wurden.
+        if (($r.PSObject.Properties.Name -contains 'Workspaces') -and $r.Workspaces.Count -gt 0) {
+            $cfg.ruWorkspaces = $r.Workspaces
+        }
+    } else { $errors.Add($r.Error) }
 
     $r = Test-GitBulkTicket ([string]$Raw['ticket'])
     if ($r.Ok) { $cfg.ticket = $r.Value } else { $errors.Add($r.Error) }

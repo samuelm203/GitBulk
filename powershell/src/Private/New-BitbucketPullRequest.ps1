@@ -12,7 +12,10 @@ function New-BitbucketPullRequest {
         [Parameter(Mandatory)][string]$Ru,
         [Parameter(Mandatory)][string]$SourceBranch,
         [Parameter(Mandatory)][string]$Title,
-        [string]$Description = ''
+        [string]$Description = '',
+
+        # Per-RU-Workspace-Override (Vorrang vor BitbucketConfig.workspace).
+        [string]$Workspace = ''
     )
 
     $cloud = ([string]$BitbucketConfig.apiVariant) -ne 'server'
@@ -29,7 +32,7 @@ function New-BitbucketPullRequest {
     } else {
         'https://api.bitbucket.org/2.0'
     }
-    $workspace = [string]$BitbucketConfig.workspace
+    $workspace = if (-not [string]::IsNullOrEmpty($Workspace)) { $Workspace } else { [string]$BitbucketConfig.workspace }
     $targetBranch = [string]$BitbucketConfig.targetBranch
     $reviewers = @($BitbucketConfig.reviewers)
 
