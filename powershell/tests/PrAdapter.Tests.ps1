@@ -48,6 +48,16 @@ InModuleScope GitBulk {
             $r.Ok | Should -BeTrue   # PR-Erstellung erfolgreich, Reviewer-Fehler ignoriert
             Should -Invoke Invoke-GitBulkHttp -Times 1 -ParameterFilter { $Uri -eq 'https://api.github.com/repos/o/r/pulls/9/requested_reviewers' }
         }
+
+        It 'honors a per-RU owner override' {
+            Mock Invoke-GitBulkHttp { @{ StatusCode = 201; Body = [pscustomobject]@{ number = 1; html_url = 'u' }; Error = $null } }
+            $cfg = @{ owner = 'default-owner'; targetBranch = 'main'; reviewers = @() }
+            $r = New-GitHubPullRequest -GitHubConfig $cfg -Token 't' -Ru 'r' -SourceBranch 'f' -Title 'T' -Workspace 'override-owner'
+            $r.Ok | Should -BeTrue
+            Should -Invoke Invoke-GitBulkHttp -Times 1 -ParameterFilter {
+                $Uri -eq 'https://api.github.com/repos/override-owner/r/pulls'
+            }
+        }
     }
 
     Describe 'New-BitbucketPullRequest' {
@@ -87,6 +97,16 @@ InModuleScope GitBulk {
             $r.Error | Should -Match 'requires apiBaseUrl'
             Should -Invoke Invoke-GitBulkHttp -Times 0
         }
+
+        It 'honors a per-RU workspace override (cloud)' {
+            Mock Invoke-GitBulkHttp { @{ StatusCode = 201; Body = [pscustomobject]@{ id = 1; links = [pscustomobject]@{ html = [pscustomobject]@{ href = 'u' } } }; Error = $null } }
+            $cfg = @{ workspace = 'default-ws'; apiVariant = 'cloud'; targetBranch = 'master'; reviewers = @() }
+            $r = New-BitbucketPullRequest -BitbucketConfig $cfg -Token 't' -Ru 'r' -SourceBranch 'f' -Title 'T' -Workspace 'override-ws'
+            $r.Ok | Should -BeTrue
+            Should -Invoke Invoke-GitBulkHttp -Times 1 -ParameterFilter {
+                $Uri -eq 'https://api.bitbucket.org/2.0/repositories/override-ws/r/pullrequests'
+            }
+        }
     }
 
     Describe 'New-GitBulkPullRequest (dispatcher)' {
@@ -102,6 +122,18 @@ InModuleScope GitBulk {
             $r = New-GitBulkPullRequest -Config $cfg -Ru 'r' -SourceBranch 'feat' -Title 'T'
             $r.Ok | Should -BeTrue
             Should -Invoke Invoke-GitBulkHttp -Times 1
+        }
+
+        It 'passes a per-RU workspace override through to the adapter' {
+            Mock Invoke-GitBulkHttp { @{ StatusCode = 201; Body = [pscustomobject]@{ number = 1; html_url = 'u' }; Error = $null } }
+            $env:GITBULK_GITHUB_TOKEN = 'ghtok'
+            $cfg = @{ prPlatform = 'github'; github = @{ owner = 'o'; targetBranch = 'main'; reviewers = @() } }
+
+            $r = New-GitBulkPullRequest -Config $cfg -Ru 'r' -SourceBranch 'feat' -Title 'T' -Workspace 'ws-override'
+            $r.Ok | Should -BeTrue
+            Should -Invoke Invoke-GitBulkHttp -Times 1 -ParameterFilter {
+                $Uri -eq 'https://api.github.com/repos/ws-override/r/pulls'
+            }
         }
 
         It 'returns an error when the token env var is missing' {

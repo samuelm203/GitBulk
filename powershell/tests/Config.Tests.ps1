@@ -45,6 +45,26 @@ Describe 'Get-GitBulkConfig validation' {
         $cfg.bitbucket.targetBranch | Should -Be 'master'
     }
 
+    It 'normalizes per-RU workspace overrides from object entries' {
+        $c = NewValidRawConfig
+        $c.rus = @('repo-a', @{ repo = 'repo-b'; workspace = 'other-ws' })
+        $cfg = Get-GitBulkConfig -InputObject $c
+        $cfg.rus | Should -Be @('repo-a', 'repo-b')
+        $cfg.ruWorkspaces['repo-b'] | Should -Be 'other-ws'
+        $cfg.ruWorkspaces.Contains('repo-a') | Should -BeFalse
+    }
+
+    It 'omits ruWorkspaces when no override is given' {
+        $cfg = Get-GitBulkConfig -InputObject (NewValidRawConfig)
+        $cfg.Contains('ruWorkspaces') | Should -BeFalse
+    }
+
+    It 'rejects a workspace containing a path separator' {
+        $c = NewValidRawConfig
+        $c.rus = @(@{ repo = 'repo-a'; workspace = 'evil/../x' })
+        { Get-GitBulkConfig -InputObject $c } | Should -Throw '*workspace*'
+    }
+
     It 'rejects a config missing required fields' {
         { Get-GitBulkConfig -InputObject @{ prPlatform = 'bitbucket'; bitbucket = @{ workspace = 'ws' } } } |
             Should -Throw

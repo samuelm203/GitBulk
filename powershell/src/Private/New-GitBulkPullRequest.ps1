@@ -11,7 +11,10 @@ function New-GitBulkPullRequest {
         [Parameter(Mandatory)][string]$Ru,
         [Parameter(Mandatory)][string]$SourceBranch,
         [Parameter(Mandatory)][string]$Title,
-        [string]$Description = ''
+        [string]$Description = '',
+
+        # Optionaler Per-RU-Workspace/Owner-Override (Vorrang vor der Sub-Config).
+        [string]$Workspace = ''
     )
 
     switch ([string]$Config.prPlatform) {
@@ -26,7 +29,7 @@ function New-GitBulkPullRequest {
                 }
             }
             return New-GitHubPullRequest -GitHubConfig $Config.github -Token $token `
-                -Ru $Ru -SourceBranch $SourceBranch -Title $Title -Description $Description
+                -Ru $Ru -SourceBranch $SourceBranch -Title $Title -Description $Description -Workspace $Workspace
         }
         'bitbucket' {
             if (-not $Config.Contains('bitbucket')) {
@@ -39,7 +42,7 @@ function New-GitBulkPullRequest {
                 }
             }
             return New-BitbucketPullRequest -BitbucketConfig $Config.bitbucket -Token $token `
-                -Ru $Ru -SourceBranch $SourceBranch -Title $Title -Description $Description
+                -Ru $Ru -SourceBranch $SourceBranch -Title $Title -Description $Description -Workspace $Workspace
         }
         'azure-devops' {
             return @{ Ok = $false; Id = $null; Url = ''; StatusCode = 0
