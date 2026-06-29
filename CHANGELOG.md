@@ -5,7 +5,8 @@ All notable changes to GitBulk are documented here. The format is based on
 follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 GitBulk ships **two implementations** from one repository: the reference
-implementation in [`node_ts/`](./node_ts) (published to npm as `gitbulk`) and a
+implementation in [`node_ts/`](./node_ts) (published to npm as
+[`@samuelm203/gitbulk`](https://www.npmjs.com/package/@samuelm203/gitbulk)) and a
 native PowerShell port in [`powershell/`](./powershell). Both are kept at feature
 parity (the browser GUI and terminal TUI are Node-only).
 
@@ -13,9 +14,9 @@ parity (the browser GUI and terminal TUI are Node-only).
 
 _Nothing yet._
 
-## [0.1.0] - 2026-06-26
+## [1.0.0] - 2026-06-29
 
-Initial release.
+Initial public release.
 
 ### Added — core
 
@@ -66,5 +67,5 @@ Initial release.
 - Tokens are never read from a project config and never logged.
 - The `--gui` server binds to `127.0.0.1` only and never sends tokens to the browser.
 
-[Unreleased]: https://github.com/samuelm203/GitBulk/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/samuelm203/GitBulk/releases/tag/v0.1.0
+[Unreleased]: https://github.com/samuelm203/GitBulk/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/samuelm203/GitBulk/releases/tag/v1.0.0

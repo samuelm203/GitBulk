@@ -80,11 +80,11 @@ Run it without installing anything, or install it globally:
 
 ```bash
 # One-off, no install (recommended for trying it out):
-npx gitbulk --help
-npx gitbulk init
+npx @samuelm203/gitbulk --help
+npx @samuelm203/gitbulk init
 
-# Or install the "gitbulk" command globally:
-npm install -g gitbulk
+# Or install it globally — the command is still "gitbulk":
+npm install -g @samuelm203/gitbulk
 gitbulk --help
 ```
 
