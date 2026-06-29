@@ -15,22 +15,32 @@
 .EXAMPLE
     ./gitbulk.ps1 -Init
     ./gitbulk.ps1 -Init -Output ./gitbulk.config.yaml -Force
+
+.EXAMPLE
+    ./gitbulk.ps1 -Status -Config ./gitbulk.config.yaml
+    ./gitbulk.ps1 -Status -Config ./gitbulk.config.yaml -Json
 #>
 [CmdletBinding(DefaultParameterSetName = 'Run')]
 param(
     [Parameter(Mandatory, ParameterSetName = 'Run')]
+    [Parameter(Mandatory, ParameterSetName = 'Status')]
     [string]$Config,
 
     [Parameter(ParameterSetName = 'Run')]
     [switch]$DryRun,
 
     [Parameter(ParameterSetName = 'Run')]
+    [Parameter(ParameterSetName = 'Status')]
     [string]$Only,
+
+    [Parameter(Mandatory, ParameterSetName = 'Status')]
+    [switch]$Status,
 
     [Parameter(Mandatory, ParameterSetName = 'List')]
     [switch]$ListOperations,
 
     [Parameter(ParameterSetName = 'List')]
+    [Parameter(ParameterSetName = 'Status')]
     [switch]$Json,
 
     [Parameter(Mandatory, ParameterSetName = 'Init')]
@@ -91,6 +101,14 @@ if ($Auth) {
 if ($Init) {
     $code = Invoke-GitBulkInit -OutputPath $Output -Force:$Force -NoColor:$NoColor
     exit $code
+}
+
+if ($Status) {
+    $report = Get-GitBulkStatusReport -ConfigPath $Config -Only $Only
+    if (-not $report) { exit 3 }   # Setup-Fehler wurden bereits nach stderr geschrieben
+    if ($Json) { Format-GitBulkStatusJson -Report $report }
+    else { Format-GitBulkStatusTable -Report $report }
+    exit 0
 }
 
 $code = Invoke-GitBulk -ConfigPath $Config -DryRun:$DryRun -Only $Only -NoColor:$NoColor

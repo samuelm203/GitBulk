@@ -42,6 +42,11 @@ $env:GITBULK_GITHUB_TOKEN = '…'      # or GITBULK_BITBUCKET_TOKEN
 ./gitbulk.ps1 -Auth status                   # shows which platforms have a token
 ./gitbulk.ps1 -Auth logout -Platform github  # remove it again (omit -Platform = all)
 
+# Show the PR status of a config's RUs (read-only — no git, no writes):
+./gitbulk.ps1 -Status -Config ./gitbulk.config.yaml            # table per RU
+./gitbulk.ps1 -Status -Config ./gitbulk.config.yaml -Only a,b  # subset
+./gitbulk.ps1 -Status -Config ./gitbulk.config.yaml -Json      # machine-readable
+
 # Or via the module functions:
 Import-Module ./GitBulk.psd1
 Invoke-GitBulk -ConfigPath ./gitbulk.config.yaml -DryRun
@@ -136,6 +141,32 @@ bitbucket:
 With an override the repo is checked out under `workspaceDir/<workspace>/<repo>` so
 that same-named repos from different workspaces don't collide locally. The workspace
 must be a plain segment (no `/`, `\` or `..`).
+
+### Checking PR status after a run
+
+`-Status` queries the platform for the **same config** and shows, per RU, the state
+of its PR — without touching any local repo or performing a single write. It
+re-derives the feature branch exactly like a run (`<ticket>-<branch>`) and looks the
+PR up by its source branch (per-RU workspace overrides are honoured):
+
+```text
+Ticket AKB-1234 · branch AKB-1234-feature/x · github · 3 RUs
+
+RU              PR   STATE   APPROVALS  CI       URL
+service-api     #11  open    2/3        passed   https://github.com/org/service-api/pull/11
+service-worker  #12  merged  2          running  https://github.com/org/service-worker/pull/12
+legacy-tool     -    none    -          -
+
+Summary: 1 merged · 1 open · 0 declined · 1 none
+```
+
+Each RU is reported as **open**, **merged**, **declined** or **none**, with its
+**approvals** (`approved/required` where the platform exposes a required count) and a
+best-effort **CI** rollup (passed / failed / running / none). API errors are listed
+per RU without aborting the rest. `-Json` emits the report for scripting; the same
+data is available programmatically via `Get-GitBulkStatusReport`. Token resolution is
+identical to a run (env var → stored token → prompt). Bitbucket Cloud/Server and
+GitHub are supported.
 
 ## Requirements
 
