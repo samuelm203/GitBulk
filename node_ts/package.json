@@ -3,6 +3,20 @@
   "version": "0.1.0",
   "description": "Configurable CLI tool for bulk operations on Git repositories",
   "license": "Apache-2.0",
+  "author": "Samuel Ming",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/samuelm203/GitBulk.git",
+    "directory": "node_ts"
+  },
+  "homepage": "https://github.com/samuelm203/GitBulk#readme",
+  "bugs": {
+    "url": "https://github.com/samuelm203/GitBulk/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

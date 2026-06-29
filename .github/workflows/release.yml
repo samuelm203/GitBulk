@@ -1,0 +1,69 @@
+# Release-Workflow: veröffentlicht das npm-Paket `gitbulk` (aus node_ts/), wenn
+# ein Tag `vX.Y.Z` gepusht wird (oder manuell via "Run workflow").
+#
+# Voraussetzungen (einmalig im Repo einzurichten):
+#   - Repository-Secret `NPM_TOKEN` mit einem npm-Automation-Token, der
+#     Publish-Rechte auf das Paket `gitbulk` hat.
+#   - Der Paketname `gitbulk` muss auf npm verfügbar/dir zugeordnet sein.
+#
+# Provenance (--provenance) verlangt `id-token: write` und einen öffentlichen
+# Repo-Kontext; `repository.url` in der package.json muss auf dieses Repo zeigen.
+#
+# Ablauf für ein Release:
+#   1. version in node_ts/package.json bumpen (z. B. auf 0.2.0) + CHANGELOG ergänzen
+#   2. committen, mergen
+#   3. `git tag v0.2.0 && git push origin v0.2.0`
+#   → dieser Workflow baut, testet und published.
+
+name: Release
+
+on:
+  push:
+    tags: ['v*.*.*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write # für npm provenance
+
+jobs:
+  publish:
+    name: Build, test & publish to npm
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: node_ts
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: 'https://registry.npmjs.org'
+          cache: npm
+          cache-dependency-path: node_ts/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify the tag matches package.json version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          PKG="$(node -p "require('./package.json').version")"
+          TAG="${GITHUB_REF_NAME#v}"
+          echo "package.json: $PKG · tag: $TAG"
+          if [ "$PKG" != "$TAG" ]; then
+            echo "::error::Tag v$TAG does not match package.json version $PKG — bump the version first."
+            exit 1
+          fi
+
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm test
+
+      - name: Publish to npm
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

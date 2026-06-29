@@ -76,25 +76,34 @@ deliberately **tiny dependency footprint** (see below).
 
 ## Installation
 
-GitBulk lives in the `node_ts/` directory of the repository.
+Run it without installing anything, or install it globally:
+
+```bash
+# One-off, no install (recommended for trying it out):
+npx gitbulk --help
+npx gitbulk init
+
+# Or install the "gitbulk" command globally:
+npm install -g gitbulk
+gitbulk --help
+```
+
+Requires **Node ≥ 20**. The only runtime dependencies are `zod` and `yaml` (plus `express` + `open`,
+pulled in only for the optional `--gui` dashboard).
+
+### From source (for development)
+
+GitBulk's reference implementation lives in the `node_ts/` directory of the repository.
 
 ```bash
 git clone https://github.com/samuelm203/GitBulk.git
 cd GitBulk/node_ts
 npm install
-npm run build
-```
+npm run build      # produces the executable entry point at dist/cli/index.js
 
-This produces the executable entry point at `dist/cli/index.js`. Run it directly with Node, or
-link it locally:
-
-```bash
-# Run directly
 node dist/cli/index.js --help
-
-# Or link it as a global "gitbulk" command for local development
-npm link
-gitbulk --help
+# …or link it as a global "gitbulk" command:
+npm link && gitbulk --help
 ```
 
 ---
