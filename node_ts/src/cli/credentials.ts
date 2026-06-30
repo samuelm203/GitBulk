@@ -21,9 +21,9 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync, chmodSync }
 import process from 'node:process';
 
 /** Plattformen mit Token-Unterstützung (Azure DevOps: noch kein Adapter). */
-export type TokenPlatform = 'bitbucket' | 'github';
+export type TokenPlatform = 'bitbucket' | 'github' | 'gitlab';
 
-export const TOKEN_PLATFORMS: readonly TokenPlatform[] = ['bitbucket', 'github'];
+export const TOKEN_PLATFORMS: readonly TokenPlatform[] = ['bitbucket', 'github', 'gitlab'];
 
 interface CredentialsFile {
   tokens: Partial<Record<TokenPlatform, string>>;

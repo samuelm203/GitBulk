@@ -50,7 +50,7 @@ function asZodCheck<T>(
  * Aktuell implementiert: Bitbucket.
  * Vorbereitet (Adapter-Interface, Implementierung folgt): Azure DevOps.
  */
-export const PrPlatformSchema = z.enum(['bitbucket', 'azure-devops', 'github']);
+export const PrPlatformSchema = z.enum(['bitbucket', 'azure-devops', 'github', 'gitlab']);
 export type PrPlatform = z.infer<typeof PrPlatformSchema>;
 
 /**
@@ -107,6 +107,24 @@ export const GitHubConfigSchema = z.object({
   reviewers: z.array(z.string().min(1)).default([]),
 });
 export type GitHubConfig = z.infer<typeof GitHubConfigSchema>;
+
+/**
+ * GitLab-spezifische MR-Konfiguration.
+ *
+ * Token wird *nicht* in der Datei erwartet — er wird via Env-Variable
+ * (`GITBULK_GITLAB_TOKEN`) gelesen.
+ */
+export const GitLabConfigSchema = z.object({
+  /** Namespace (Gruppe oder User), z. B. "my-group". Projekt = `<namespace>/<repo>`. */
+  namespace: z.string().min(1, 'GitLab namespace must not be empty'),
+  /** Ziel-Branch für die Merge Requests (Default: `main`). */
+  targetBranch: z.string().min(1).default('main'),
+  /** Optionale API-Basis-URL für selbst-gehostetes GitLab (`https://gitlab.example.com/api/v4`). */
+  apiBaseUrl: z.string().url().optional(),
+  /** Optionale Reviewer als numerische GitLab-User-IDs (als Strings). */
+  reviewers: z.array(z.string().min(1)).default([]),
+});
+export type GitLabConfig = z.infer<typeof GitLabConfigSchema>;
 
 /**
  * Retry-Verhalten beim `git push` (Flowchart: `Counter < 3` + `Sleep (Backoff)`).
@@ -305,6 +323,9 @@ export const GitBulkConfigSchema = z
 
     /** GitHub-spezifische Settings (Pflicht wenn prPlatform === 'github') */
     github: GitHubConfigSchema.optional(),
+
+    /** GitLab-spezifische Settings (Pflicht wenn prPlatform === 'gitlab') */
+    gitlab: GitLabConfigSchema.optional(),
   })
   // Cross-Field-Validierung: passende Sub-Config muss vorhanden sein.
   .superRefine((config, ctx) => {
@@ -327,6 +348,13 @@ export const GitBulkConfigSchema = z
         code: z.ZodIssueCode.custom,
         path: ['github'],
         message: 'github config is required when prPlatform is "github"',
+      });
+    }
+    if (config.prPlatform === 'gitlab' && !config.gitlab) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['gitlab'],
+        message: 'gitlab config is required when prPlatform is "gitlab"',
       });
     }
     if (config.cloneIfMissing && !config.cloneBaseUrl) {

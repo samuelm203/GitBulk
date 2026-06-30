@@ -217,6 +217,14 @@ bitbucket:
 #   targetBranch: main
 #   reviewers: []               # GitHub logins
 #   # apiBaseUrl: https://ghe.example.com/api/v3   # GitHub Enterprise only
+
+# For GitLab, use prPlatform: gitlab and a gitlab block instead:
+# prPlatform: gitlab
+# gitlab:
+#   namespace: my-group         # group or user; project = <namespace>/<repo>
+#   targetBranch: main
+#   reviewers: []               # numeric GitLab user IDs (as strings)
+#   # apiBaseUrl: https://gitlab.example.com/api/v4   # self-hosted GitLab only
 ```
 
 ### Field reference
@@ -240,9 +248,10 @@ bitbucket:
 | `retry`            | no       | see above   | `{ maxAttempts: 3, backoffMs: 1000, maxBackoffMs: 30000 }`.        |
 | `dryRun`           | no       | `false`     | Skip all write operations (push, PR API).                          |
 | `skipHooks`        | no       | `false`     | Disable git hooks (`core.hooksPath=/dev/null`).                    |
-| `prPlatform`       | yes      | —           | `bitbucket` \| `github` \| `azure-devops` (Azure not yet implemented). |
+| `prPlatform`       | yes      | —           | `bitbucket` \| `github` \| `gitlab` \| `azure-devops` (Azure not yet implemented). |
 | `bitbucket`        | cond.    | —           | `{ workspace, apiVariant: cloud\|server, targetBranch: master, reviewers: [], apiBaseUrl? }`. Required when `prPlatform: bitbucket`. Token from `GITBULK_BITBUCKET_TOKEN`. |
 | `github`           | cond.    | —           | `{ owner, targetBranch: main, reviewers: [], apiBaseUrl? }`. Required when `prPlatform: github`. Token from `GITBULK_GITHUB_TOKEN`. |
+| `gitlab`           | cond.    | —           | `{ namespace, targetBranch: main, reviewers: [], apiBaseUrl? }` (reviewers = numeric user IDs; project = `namespace/repo`). Required when `prPlatform: gitlab`. Token from `GITBULK_GITLAB_TOKEN`. |
 
 See [`examples/`](./examples) for ready-to-copy configs (YAML, JSON, JS, TS), a
 declarative-operations config (`gitbulk.operations.yaml`), and example code-change scripts
