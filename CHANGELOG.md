@@ -14,6 +14,14 @@ parity (the browser GUI and terminal TUI are Node-only).
 
 _Nothing yet._
 
+## [1.0.1] - 2026-06-29
+
+### Fixed
+
+- `gitbulk --version` now reports the actual package version. It was hardcoded in
+  `src/index.ts` and read `0.1.0` even from the published `1.0.0`; the version is
+  now read from `package.json` at runtime, so it can never drift from a release again.
+
 ## [1.0.0] - 2026-06-29
 
 Initial public release.
@@ -67,5 +75,6 @@ Initial public release.
 - Tokens are never read from a project config and never logged.
 - The `--gui` server binds to `127.0.0.1` only and never sends tokens to the browser.
 
-[Unreleased]: https://github.com/samuelm203/GitBulk/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/samuelm203/GitBulk/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/samuelm203/GitBulk/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/samuelm203/GitBulk/releases/tag/v1.0.0
