@@ -12,7 +12,13 @@ parity (the browser GUI and terminal TUI are Node-only).
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+
+- **GitLab support** (`prPlatform: gitlab`): create merge requests (with
+  create-vs-update detection) and `gitbulk status` (state + approvals + CI rollup)
+  against gitlab.com and self-hosted instances. Project = `<namespace>/<repo>`,
+  per-RU `workspace` overrides the namespace, token from `GITBULK_GITLAB_TOKEN`,
+  and `gitbulk auth login --platform gitlab` stores it. (Node implementation.)
 
 ## [1.0.1] - 2026-06-29
 

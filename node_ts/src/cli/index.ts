@@ -87,7 +87,7 @@ template options:
   -f, --force            Overwrite the output file if it exists
 
 auth options:
-      --platform <p>     Platform: bitbucket | github (required for login)
+      --platform <p>     Platform: bitbucket | github | gitlab (required for login)
 
 Exit codes: 0 ok | 1 a PR failed | 2 a fatal per-RU error | 3 setup error | 130 SIGINT
 `;
@@ -122,7 +122,7 @@ At run time the resolution order is: env var > stored token > interactive prompt
 Tokens are never printed or logged.
 
 Usage:
-  gitbulk auth login --platform <bitbucket|github>   Prompt (hidden) and store a token
+  gitbulk auth login --platform <bitbucket|github|gitlab>   Prompt (hidden) and store a token
   gitbulk auth logout [--platform <p>]               Remove a stored token (omit = all)
   gitbulk auth status                                Show which tokens are available
 `;
@@ -367,8 +367,13 @@ async function main(): Promise<number> {
     if (positionals.length > 2) {
       return usageError(`Unexpected argument "${positionals[2]}" for auth.`);
     }
-    if (values.platform !== undefined && values.platform !== 'bitbucket' && values.platform !== 'github') {
-      return usageError(`Invalid --platform "${values.platform}". Allowed: bitbucket, github.`);
+    if (
+      values.platform !== undefined &&
+      values.platform !== 'bitbucket' &&
+      values.platform !== 'github' &&
+      values.platform !== 'gitlab'
+    ) {
+      return usageError(`Invalid --platform "${values.platform}". Allowed: bitbucket, github, gitlab.`);
     }
     const interactive = process.stdin.isTTY === true && process.stdout.isTTY === true;
     const authOpts: Parameters<typeof runAuth>[0] = { action, interactive, noColor: !useColor };

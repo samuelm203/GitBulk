@@ -191,6 +191,8 @@ export class PrAdapterError extends Error {
  * damit sie nicht versehentlich eingecheckt werden:
  *
  *   - Bitbucket:     GITBULK_BITBUCKET_TOKEN
+ *   - GitHub:        GITBULK_GITHUB_TOKEN
+ *   - GitLab:        GITBULK_GITLAB_TOKEN
  *   - Azure DevOps:  GITBULK_AZURE_DEVOPS_TOKEN
  *
  * @param config - Validierte GitBulk-Config (gefreezed)
@@ -226,6 +228,19 @@ export async function createPrAdapter(config: GitBulkConfig): Promise<PullReques
       }
       const { GitHubPrAdapter } = await import('./pr-github.js');
       return new GitHubPrAdapter(config.github, token);
+    }
+    case 'gitlab': {
+      if (!config.gitlab) {
+        throw new PrAdapterError('prPlatform=gitlab but no gitlab config present');
+      }
+      const token = process.env.GITBULK_GITLAB_TOKEN;
+      if (!token || token.trim().length === 0) {
+        throw new PrAdapterError(
+          'Environment variable GITBULK_GITLAB_TOKEN is required for GitLab MR creation',
+        );
+      }
+      const { GitLabPrAdapter } = await import('./pr-gitlab.js');
+      return new GitLabPrAdapter(config.gitlab, token);
     }
     case 'azure-devops': {
       // Platzhalter — Implementierung folgt nach Bitbucket.
