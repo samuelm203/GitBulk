@@ -1,7 +1,7 @@
 /**
  * `gitbulk auth` — verwaltet persistent gespeicherte PR-Tokens.
  *
- *   gitbulk auth login  --platform bitbucket|github   Token (maskiert) speichern
+ *   gitbulk auth login  --platform bitbucket|github|gitlab|azure-devops   Token speichern
  *   gitbulk auth logout [--platform …]                Token entfernen (ohne = alle)
  *   gitbulk auth status                               zeigt, welche Tokens vorliegen
  *
@@ -56,7 +56,10 @@ export async function runAuth(opts: AuthOptions): Promise<number> {
   switch (opts.action) {
     case 'login': {
       if (opts.platform === undefined) {
-        return fail('`auth login` requires --platform bitbucket|github.', noColor);
+        return fail(
+          '`auth login` requires --platform bitbucket|github|gitlab|azure-devops.',
+          noColor,
+        );
       }
       if (!opts.interactive && opts.promptToken === undefined) {
         return fail(

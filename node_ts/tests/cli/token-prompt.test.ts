@@ -14,23 +14,25 @@ describe('prTokenEnvVar', () => {
   it('maps platforms to their env var', () => {
     assert.equal(prTokenEnvVar('bitbucket'), 'GITBULK_BITBUCKET_TOKEN');
     assert.equal(prTokenEnvVar('github'), 'GITBULK_GITHUB_TOKEN');
-    // Azure-Adapter ist nicht implementiert → kein Token-Prompt; der Nutzer
-    // soll sofort die "not implemented"-Meldung des Adapters sehen.
-    assert.equal(prTokenEnvVar('azure-devops'), undefined);
+    assert.equal(prTokenEnvVar('gitlab'), 'GITBULK_GITLAB_TOKEN');
+    assert.equal(prTokenEnvVar('azure-devops'), 'GITBULK_AZURE_DEVOPS_TOKEN');
   });
 
-  it('azure-devops passes the guard without prompting (adapter reports itself)', async () => {
+  it('azure-devops prompts like any other platform and sets the env var', async () => {
+    const env: NodeJS.ProcessEnv = {};
     let prompted = false;
     const res = await ensurePrToken('azure-devops', {
       interactive: true,
-      env: {},
+      env,
+      readStored: () => undefined,
       prompt: () => {
         prompted = true;
-        return Promise.resolve('never');
+        return Promise.resolve('pat-entered');
       },
     });
     assert.deepEqual(res, { ok: true });
-    assert.equal(prompted, false, 'must not prompt for an unimplemented platform');
+    assert.equal(prompted, true, 'the adapter is implemented → the guard must prompt');
+    assert.equal(env.GITBULK_AZURE_DEVOPS_TOKEN, 'pat-entered');
   });
 });
 

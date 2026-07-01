@@ -20,10 +20,15 @@ import { join } from 'node:path';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync, chmodSync } from 'node:fs';
 import process from 'node:process';
 
-/** Plattformen mit Token-Unterstützung (Azure DevOps: noch kein Adapter). */
-export type TokenPlatform = 'bitbucket' | 'github' | 'gitlab';
+/** Plattformen mit Token-Unterstützung. */
+export type TokenPlatform = 'bitbucket' | 'github' | 'gitlab' | 'azure-devops';
 
-export const TOKEN_PLATFORMS: readonly TokenPlatform[] = ['bitbucket', 'github', 'gitlab'];
+export const TOKEN_PLATFORMS: readonly TokenPlatform[] = [
+  'bitbucket',
+  'github',
+  'gitlab',
+  'azure-devops',
+];
 
 interface CredentialsFile {
   tokens: Partial<Record<TokenPlatform, string>>;

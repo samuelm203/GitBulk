@@ -52,11 +52,7 @@ export function prTokenEnvVar(platform: PrPlatform): string | undefined {
     case 'gitlab':
       return 'GITBULK_GITLAB_TOKEN';
     case 'azure-devops':
-      // Adapter ist noch nicht implementiert — hier KEINEN Token abfragen,
-      // sonst tippt der Nutzer einen Token ein und bekommt direkt danach
-      // "not implemented" vom Adapter. Sobald der Adapter existiert:
-      // 'GITBULK_AZURE_DEVOPS_TOKEN'.
-      return undefined;
+      return 'GITBULK_AZURE_DEVOPS_TOKEN';
     default:
       return undefined;
   }
@@ -89,7 +85,9 @@ export async function ensurePrToken(
   const readStored =
     opts.readStored ??
     ((p: PrPlatform): string | undefined =>
-      p === 'bitbucket' || p === 'github' || p === 'gitlab' ? readStoredToken(p) : undefined);
+      p === 'bitbucket' || p === 'github' || p === 'gitlab' || p === 'azure-devops'
+        ? readStoredToken(p)
+        : undefined);
   const stored = readStored(platform);
   if (stored !== undefined && stored.trim().length > 0) {
     env[varName] = stored.trim();
