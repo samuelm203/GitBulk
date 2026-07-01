@@ -5,7 +5,7 @@ A **native PowerShell port** of [GitBulk](../README.md) — same bulk Git workfl
 Node runtime required.
 
 > **Status:** functionally on par with the Node version. The end-to-end flow works
-> (config → run across RUs → commit/push → open PRs on GitHub/Bitbucket), all eight
+> (config → run across RUs → commit/push → open PRs on GitHub/GitLab/Bitbucket), all eight
 > declarative `operations:` are ported (file, npm, json and maven), discoverable via
 > `-ListOperations`, an interactive `-Init` generator scaffolds an `operations:`
 > config, and `-Template` prints a ready-to-edit config without prompts. (The Node
@@ -57,6 +57,12 @@ Exit codes: `0` success · `1` a PR failed · `2` a fatal per-RU error · `3` se
 error (bad config, unknown `-Only` RU). The config format matches the Node version
 (see the repo root [README](../README.md)); the code change is defined via `script:`
 **or** a declarative `operations:` chain.
+
+PR platforms: **Bitbucket** (Cloud/Server), **GitHub** (`.com`/Enterprise) and
+**GitLab** (`.com`/self-hosted) — create PRs/MRs and `-Status`. For GitLab use
+`prPlatform: gitlab` with a `gitlab: { namespace, targetBranch, reviewers, apiBaseUrl? }`
+block (project = `namespace/repo`, reviewers = numeric user IDs, token from
+`GITBULK_GITLAB_TOKEN`).
 
 **PR tokens** are never read from the config. At run time the resolution order is
 **environment variable → stored token → interactive prompt** (a `-DryRun` needs no

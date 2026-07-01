@@ -34,7 +34,7 @@ function Invoke-GitBulkAuth {
         [ValidateSet('login', 'logout', 'status')]
         [string]$Action,
 
-        [ValidateSet('bitbucket', 'github')]
+        [ValidateSet('bitbucket', 'github', 'gitlab')]
         [string]$Platform,
 
         [switch]$Interactive,

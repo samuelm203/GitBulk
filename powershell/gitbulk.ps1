@@ -57,7 +57,7 @@ param(
     [string]$Auth,
 
     [Parameter(ParameterSetName = 'Auth')]
-    [ValidateSet('bitbucket', 'github')]
+    [ValidateSet('bitbucket', 'github', 'gitlab')]
     [string]$Platform,
 
     [Parameter(ParameterSetName = 'Init')]

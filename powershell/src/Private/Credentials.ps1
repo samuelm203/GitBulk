@@ -13,7 +13,7 @@
 # geloggt.
 
 # Plattformen mit Token-Unterstützung (Azure DevOps: noch kein Adapter).
-$script:GitBulkTokenPlatforms = @('bitbucket', 'github')
+$script:GitBulkTokenPlatforms = @('bitbucket', 'github', 'gitlab')
 
 function Get-GitBulkCredentialDir {
     # GITBULK_HOME übersteuert ~/.gitbulk (für Tests / Custom-Setups).
