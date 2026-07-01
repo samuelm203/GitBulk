@@ -243,10 +243,17 @@ export async function createPrAdapter(config: GitBulkConfig): Promise<PullReques
       return new GitLabPrAdapter(config.gitlab, token);
     }
     case 'azure-devops': {
-      // Platzhalter — Implementierung folgt nach Bitbucket.
-      throw new PrAdapterError(
-        'Azure DevOps adapter is not yet implemented. Use prPlatform: "bitbucket" for now.',
-      );
+      if (!config.azureDevOps) {
+        throw new PrAdapterError('prPlatform=azure-devops but no azureDevOps config present');
+      }
+      const token = process.env.GITBULK_AZURE_DEVOPS_TOKEN;
+      if (!token || token.trim().length === 0) {
+        throw new PrAdapterError(
+          'Environment variable GITBULK_AZURE_DEVOPS_TOKEN is required for Azure DevOps PR creation',
+        );
+      }
+      const { AzureDevOpsPrAdapter } = await import('./pr-azure.js');
+      return new AzureDevOpsPrAdapter(config.azureDevOps, token);
     }
     default: {
       // TypeScript-Exhaustiveness-Check

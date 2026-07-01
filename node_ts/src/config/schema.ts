@@ -47,8 +47,7 @@ function asZodCheck<T>(
 /**
  * Schema für die unterstützten PR-Plattformen.
  *
- * Aktuell implementiert: Bitbucket.
- * Vorbereitet (Adapter-Interface, Implementierung folgt): Azure DevOps.
+ * Implementiert: Bitbucket, GitHub, GitLab, Azure DevOps.
  */
 export const PrPlatformSchema = z.enum(['bitbucket', 'azure-devops', 'github', 'gitlab']);
 export type PrPlatform = z.infer<typeof PrPlatformSchema>;
@@ -79,7 +78,13 @@ export const BitbucketConfigSchema = z.object({
 export type BitbucketConfig = z.infer<typeof BitbucketConfigSchema>;
 
 /**
- * Azure DevOps PR-Konfiguration (Platzhalter — Adapter folgt später).
+ * Azure-DevOps-PR-Konfiguration.
+ *
+ * `organization` + `project` adressieren das Repo (`repo` = RU-Name). Für Azure
+ * DevOps Server (on-prem) setzt man `apiBaseUrl` auf die Collection-URL, z. B.
+ * `https://tfs.example.com/tfs/DefaultCollection`. `targetBranch` ist der
+ * Ziel-Branch (default `master`); `reviewers` sind Azure-User-IDs (GUIDs).
+ * Token: `GITBULK_AZURE_DEVOPS_TOKEN` (PAT).
  */
 export const AzureDevOpsConfigSchema = z.object({
   organization: z.string().min(1),

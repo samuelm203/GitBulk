@@ -225,6 +225,15 @@ bitbucket:
 #   targetBranch: main
 #   reviewers: []               # numeric GitLab user IDs (as strings)
 #   # apiBaseUrl: https://gitlab.example.com/api/v4   # self-hosted GitLab only
+
+# For Azure DevOps, use prPlatform: azure-devops and an azureDevOps block instead:
+# prPlatform: azure-devops
+# azureDevOps:
+#   organization: my-org        # dev.azure.com/<organization>
+#   project: my-project         # repo is addressed as <organization>/<project>/<repo>
+#   targetBranch: main
+#   reviewers: []               # Azure user IDs (GUIDs)
+#   # apiBaseUrl: https://tfs.example.com/tfs/DefaultCollection   # Azure DevOps Server only
 ```
 
 ### Field reference
@@ -248,10 +257,11 @@ bitbucket:
 | `retry`            | no       | see above   | `{ maxAttempts: 3, backoffMs: 1000, maxBackoffMs: 30000 }`.        |
 | `dryRun`           | no       | `false`     | Skip all write operations (push, PR API).                          |
 | `skipHooks`        | no       | `false`     | Disable git hooks (`core.hooksPath=/dev/null`).                    |
-| `prPlatform`       | yes      | —           | `bitbucket` \| `github` \| `gitlab` \| `azure-devops` (Azure not yet implemented). |
+| `prPlatform`       | yes      | —           | `bitbucket` \| `github` \| `gitlab` \| `azure-devops`. |
 | `bitbucket`        | cond.    | —           | `{ workspace, apiVariant: cloud\|server, targetBranch: master, reviewers: [], apiBaseUrl? }`. Required when `prPlatform: bitbucket`. Token from `GITBULK_BITBUCKET_TOKEN`. |
 | `github`           | cond.    | —           | `{ owner, targetBranch: main, reviewers: [], apiBaseUrl? }`. Required when `prPlatform: github`. Token from `GITBULK_GITHUB_TOKEN`. |
 | `gitlab`           | cond.    | —           | `{ namespace, targetBranch: main, reviewers: [], apiBaseUrl? }` (reviewers = numeric user IDs; project = `namespace/repo`). Required when `prPlatform: gitlab`. Token from `GITBULK_GITLAB_TOKEN`. |
+| `azureDevOps`      | cond.    | —           | `{ organization, project, targetBranch: master, reviewers: [], apiBaseUrl? }` (reviewers = user GUIDs; repo = `organization/project/<ru>`, per-RU `workspace` overrides the project). Required when `prPlatform: azure-devops`. Token (PAT) from `GITBULK_AZURE_DEVOPS_TOKEN`. |
 
 See [`examples/`](./examples) for ready-to-copy configs (YAML, JSON, JS, TS), a
 declarative-operations config (`gitbulk.operations.yaml`), and example code-change scripts
