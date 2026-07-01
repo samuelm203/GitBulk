@@ -12,6 +12,7 @@ function Get-GitBulkTokenEnvVar {
     switch ($Platform) {
         'bitbucket' { return 'GITBULK_BITBUCKET_TOKEN' }
         'github' { return 'GITBULK_GITHUB_TOKEN' }
+        'gitlab' { return 'GITBULK_GITLAB_TOKEN' }
         default { return $null }
     }
 }

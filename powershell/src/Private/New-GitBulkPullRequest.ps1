@@ -44,6 +44,19 @@ function New-GitBulkPullRequest {
             return New-BitbucketPullRequest -BitbucketConfig $Config.bitbucket -Token $token `
                 -Ru $Ru -SourceBranch $SourceBranch -Title $Title -Description $Description -Workspace $Workspace
         }
+        'gitlab' {
+            if (-not $Config.Contains('gitlab')) {
+                return @{ Ok = $false; Id = $null; Url = ''; StatusCode = 0; Error = 'gitlab config is missing' }
+            }
+            $token = $env:GITBULK_GITLAB_TOKEN
+            if ([string]::IsNullOrWhiteSpace($token)) {
+                return @{ Ok = $false; Id = $null; Url = ''; StatusCode = 0
+                    Error = 'Environment variable GITBULK_GITLAB_TOKEN is required for GitLab MR creation'
+                }
+            }
+            return New-GitLabPullRequest -GitLabConfig $Config.gitlab -Token $token `
+                -Ru $Ru -SourceBranch $SourceBranch -Title $Title -Description $Description -Workspace $Workspace
+        }
         'azure-devops' {
             return @{ Ok = $false; Id = $null; Url = ''; StatusCode = 0
                 Error = 'Azure DevOps adapter is not yet implemented'

@@ -30,6 +30,14 @@ function Get-GitBulkPrStatus {
             }
             return Get-BitbucketPrStatus -BitbucketConfig $Config.bitbucket -Token $token -Ru $Ru -SourceBranch $SourceBranch -Workspace $Workspace
         }
+        'gitlab' {
+            if (-not $Config.Contains('gitlab')) { return @{ State = 'none'; Error = 'gitlab config is missing' } }
+            $token = $env:GITBULK_GITLAB_TOKEN
+            if ([string]::IsNullOrWhiteSpace($token)) {
+                return @{ State = 'none'; Error = 'Environment variable GITBULK_GITLAB_TOKEN is required for GitLab MR status' }
+            }
+            return Get-GitLabPrStatus -GitLabConfig $Config.gitlab -Token $token -Ru $Ru -SourceBranch $SourceBranch -Workspace $Workspace
+        }
         default {
             return @{ State = 'none'; Error = "status not supported for prPlatform '$($Config.prPlatform)'" }
         }

@@ -131,9 +131,9 @@ function ConvertTo-GitBulkConfig {
     # ── PR-Plattform + Sub-Config ────────────────────────────────────
     $platform = [string]$Raw['prPlatform']
     if ([string]::IsNullOrWhiteSpace($platform)) {
-        $errors.Add("Error: prPlatform is required ('bitbucket', 'github' or 'azure-devops')")
-    } elseif ($platform -notin @('bitbucket', 'github', 'azure-devops')) {
-        $errors.Add("Error: invalid prPlatform '$platform' (use 'bitbucket', 'github' or 'azure-devops')")
+        $errors.Add("Error: prPlatform is required ('bitbucket', 'github', 'gitlab' or 'azure-devops')")
+    } elseif ($platform -notin @('bitbucket', 'github', 'gitlab', 'azure-devops')) {
+        $errors.Add("Error: invalid prPlatform '$platform' (use 'bitbucket', 'github', 'gitlab' or 'azure-devops')")
     } else {
         $cfg.prPlatform = $platform
         switch ($platform) {
@@ -170,8 +170,23 @@ function ConvertTo-GitBulkConfig {
                     $cfg.github = $sub
                 }
             }
+            'gitlab' {
+                $gl = $Raw['gitlab']
+                if ($gl -isnot [System.Collections.IDictionary]) {
+                    $errors.Add("Error: gitlab config is required when prPlatform is 'gitlab'")
+                } else {
+                    if ([string]::IsNullOrWhiteSpace([string]$gl['namespace'])) { $errors.Add('Error: gitlab.namespace is required') }
+                    $sub = [ordered]@{
+                        namespace    = [string]$gl['namespace']
+                        targetBranch = if ([string]::IsNullOrWhiteSpace([string]$gl['targetBranch'])) { 'main' } else { [string]$gl['targetBranch'] }
+                        reviewers    = Get-GbReviewerList -Value $gl['reviewers'] -Name 'gitlab.reviewers' -Errors $errors
+                    }
+                    if (-not [string]::IsNullOrWhiteSpace([string]$gl['apiBaseUrl'])) { $sub.apiBaseUrl = [string]$gl['apiBaseUrl'] }
+                    $cfg.gitlab = $sub
+                }
+            }
             'azure-devops' {
-                $errors.Add("Error: Azure DevOps adapter is not yet implemented. Use prPlatform 'bitbucket' or 'github'.")
+                $errors.Add("Error: Azure DevOps adapter is not yet implemented. Use prPlatform 'bitbucket', 'github' or 'gitlab'.")
             }
         }
     }
