@@ -127,6 +127,19 @@ InModuleScope GitBulk {
             (Get-AzureDevOpsPrStatus -AzureConfig $azCfg -Token 't' -Ru 'r' -SourceBranch 'b').State | Should -Be 'declined'
         }
 
+        It 'picks the newest PR by creationDate when several exist for the branch' {
+            Mock Invoke-GitBulkHttp -ParameterFilter { $Uri -like '*searchCriteria.sourceRefName=*' } {
+                @{ StatusCode = 200; Error = $null; Body = [pscustomobject]@{ value = @(
+                            [pscustomobject]@{ pullRequestId = 1; status = 'abandoned'; creationDate = '2026-01-01T00:00:00Z' },
+                            [pscustomobject]@{ pullRequestId = 2; status = 'active'; creationDate = '2026-06-01T00:00:00Z' }
+                        ) }
+                }
+            }
+            $r = Get-AzureDevOpsPrStatus -AzureConfig $azCfg -Token 't' -Ru 'r' -SourceBranch 'b'
+            $r.State | Should -Be 'open'
+            $r.Id | Should -Be 2
+        }
+
         It 'returns none for an empty value list' {
             Mock Invoke-GitBulkHttp -ParameterFilter { $Uri -like '*searchCriteria.sourceRefName=*' } {
                 @{ StatusCode = 200; Error = $null; Body = [pscustomobject]@{ value = @() } }
