@@ -187,6 +187,21 @@ describe('AzureDevOpsPrAdapter.getPullRequestStatus', () => {
     assert.equal((await makeAdapter().getPullRequestStatus({ ru: 'r', sourceBranch: 'b' })).state, 'declined');
   });
 
+  it('picks the newest PR by creationDate when several exist for the branch', async () => {
+    mock.route('/pullrequests?searchCriteria.sourceRefName=', {
+      status: 200,
+      body: {
+        value: [
+          { pullRequestId: 1, status: 'abandoned', creationDate: '2026-01-01T00:00:00Z' },
+          { pullRequestId: 2, status: 'active', creationDate: '2026-06-01T00:00:00Z' },
+        ],
+      },
+    });
+    const info = await makeAdapter().getPullRequestStatus({ ru: 'r', sourceBranch: 'b' });
+    assert.equal(info.state, 'open');
+    assert.equal(info.id, 2);
+  });
+
   it('returns none for an empty value list', async () => {
     mock.route('/pullrequests?searchCriteria.sourceRefName=', { status: 200, body: { value: [] } });
     assert.equal((await makeAdapter().getPullRequestStatus({ ru: 'r', sourceBranch: 'b' })).state, 'none');

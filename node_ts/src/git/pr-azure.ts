@@ -231,7 +231,15 @@ export class AzureDevOpsPrAdapter implements PullRequestAdapter {
     const list = Array.isArray(data.value) ? data.value : [];
     if (list.length === 0) return { state: 'none' };
 
-    const pr = list[0] as { pullRequestId?: number; status?: string; reviewers?: unknown };
+    // Der Endpunkt bietet kein orderby — defensiv nach creationDate absteigend
+    // sortieren, damit der JÜNGSTE PR zum Source-Branch gewinnt (z. B. nach
+    // abandoned + neu erstellt).
+    const sorted = [...list].sort((a, b) => {
+      const ta = Date.parse((a as { creationDate?: string }).creationDate ?? '') || 0;
+      const tb = Date.parse((b as { creationDate?: string }).creationDate ?? '') || 0;
+      return tb - ta;
+    });
+    const pr = sorted[0] as { pullRequestId?: number; status?: string; reviewers?: unknown };
     const info: PrStatusInfo = { state: mapAzureState(pr.status) };
     if (typeof pr.pullRequestId === 'number') {
       info.id = pr.pullRequestId;

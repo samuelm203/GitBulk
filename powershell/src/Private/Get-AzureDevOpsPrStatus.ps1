@@ -45,7 +45,13 @@ function Get-AzureDevOpsPrStatus {
     if ($http.Error) { return @{ State = 'none'; Error = "network error: $($http.Error)" } }
     if ($http.StatusCode -ne 200) { return @{ State = 'none'; Error = "HTTP $($http.StatusCode)" } }
 
-    $pr = @($http.Body.value)[0]
+    # Der Endpunkt bietet kein orderby — defensiv nach creationDate absteigend
+    # sortieren, damit der JÜNGSTE PR zum Source-Branch gewinnt (z. B. nach
+    # abandoned + neu erstellt).
+    $prList = @($http.Body.value) | Sort-Object -Property {
+        if ($_.creationDate) { [datetime]$_.creationDate } else { [datetime]::MinValue }
+    } -Descending
+    $pr = @($prList)[0]
     if ($null -eq $pr) { return @{ State = 'none' } }
 
     $state = switch ("$($pr.status)") {
