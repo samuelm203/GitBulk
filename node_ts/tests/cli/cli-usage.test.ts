@@ -61,6 +61,25 @@ describe('CLI usage hygiene (subcommand vs bulk-flow options)', () => {
     assert.match(r.stderr, /mutually exclusive/);
   });
 
+  it('rejects --report combined with --tui/--gui', () => {
+    const r = runCli(['--tui', '--report', 'out.json', '--no-color']);
+    assert.equal(r.status, 3);
+    assert.match(r.stderr, /--report/);
+  });
+
+  it('rejects --retry-failed combined with --only', () => {
+    const r = runCli(['--retry-failed', 'r.json', '--only', 'a', '--no-color']);
+    assert.equal(r.status, 3);
+    assert.match(r.stderr, /mutually exclusive/);
+  });
+
+  it('rejects --report/--retry-failed for subcommands like init', () => {
+    const r = runCli(['init', '--report', 'out.json', '--no-color']);
+    assert.equal(r.status, 3);
+    assert.match(r.stderr, /--report/);
+    assert.match(r.stderr, /not valid for `init`/);
+  });
+
   it('rejects --gui for subcommands like init', () => {
     const r = runCli(['init', '--gui', '--no-color']);
     assert.equal(r.status, 3);

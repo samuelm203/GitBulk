@@ -48,6 +48,8 @@ import { runAuth } from './auth.js';
 import { runTemplate } from './template.js';
 import { runStatus } from './status.js';
 import { filterRus } from './filter-rus.js';
+import { readFailedRus } from './retry-failed.js';
+import { buildRunReport, writeRunReport } from '../core/report-file.js';
 import { handleSpecialFlags } from './special-flags.js';
 import { VERSION } from '../index.js';
 
@@ -70,6 +72,8 @@ Options:
       --gui              Browser dashboard (127.0.0.1): live process view, started via button
       --deep-log         Record a granular step-by-step log; offer to save/print it at the end
       --only <rus>       Only process these RUs (comma-separated subset)
+      --report <path>    Write a machine-readable JSON run report (for CI)
+      --retry-failed <report.json>  Re-run only the RUs that failed in a previous report
   -l, --log-level <lvl>  Log level: ${LOG_LEVELS.join(' | ')} (default: info)
       --no-color         Disable colored output
   -v, --version          Print version and exit
@@ -189,6 +193,8 @@ function parseCliArgs() {
       gui: { type: 'boolean', default: false },
       'deep-log': { type: 'boolean', default: false },
       only: { type: 'string' },
+      report: { type: 'string' },
+      'retry-failed': { type: 'string' },
       'log-level': { type: 'string', short: 'l', default: 'info' },
       'no-color': { type: 'boolean', default: false },
       version: { type: 'boolean', short: 'v', default: false },
@@ -267,7 +273,10 @@ async function main(): Promise<number> {
 
   // Bulk-Flow-Optionen, die in Subkommandos nichts bewirken — dort als Fehler
   // melden statt still zu ignorieren (Gegenstück zur strayOpts-Prüfung unten).
-  const bulkOnly = ['config', 'mode', 'dry-run', 'tui', 'gui', 'deep-log', 'only', 'log-level'];
+  const bulkOnly = [
+    'config', 'mode', 'dry-run', 'tui', 'gui', 'deep-log', 'only', 'log-level',
+    'report', 'retry-failed',
+  ];
   const bulkOnlyError = (sub: string): number | undefined => {
     const stray = bulkOnly.filter((o) => provided.has(o));
     if (stray.length === 0) return undefined;
@@ -439,12 +448,22 @@ async function main(): Promise<number> {
     gui: values.gui ?? false,
     deepLog: values['deep-log'] ?? false,
     only: values.only,
+    report: values.report,
+    retryFailed: values['retry-failed'],
     logLevel: values['log-level'] ?? 'info',
     color: useColor,
   };
 
   if (opts.tui && opts.gui) {
     return usageError('`--tui` and `--gui` are mutually exclusive — pick one view.');
+  }
+  // --report/--retry-failed gehören zum Plain-CLI-Lauf: TUI/GUI übernehmen den
+  // Lauf selbst und liefern die Summary nicht hierher zurück.
+  if ((opts.report !== undefined || opts.retryFailed !== undefined) && (opts.tui || opts.gui)) {
+    return usageError('`--report`/`--retry-failed` cannot be combined with `--tui`/`--gui`.');
+  }
+  if (opts.retryFailed !== undefined && opts.only !== undefined) {
+    return usageError('`--retry-failed` and `--only` are mutually exclusive.');
   }
 
   // ── Logger initialisieren ──────────────────────────────────────
@@ -555,6 +574,24 @@ async function main(): Promise<number> {
     return 3;
   }
 
+  // --retry-failed: nur die Fehlschläge eines vorherigen Report-Laufs erneut.
+  if (opts.retryFailed !== undefined) {
+    try {
+      const failed = readFailedRus(opts.retryFailed);
+      if (failed.length === 0) {
+        process.stdout.write('Nothing to retry — the report contains no failed RUs.\n');
+        return 0;
+      }
+      logger.info(`--retry-failed: retrying ${failed.length} RU(s): ${failed.join(', ')}`);
+      config = filterRus(config, failed.join(','));
+    } catch (err) {
+      // filterRus meldet mit "--only:"-Präfix — hier stammt der Filter aber
+      // aus dem Report, also den Flag-Namen in der Meldung geradeziehen.
+      printError((err as Error).message.replace(/^--only:/, '--retry-failed:'), useColor);
+      return 3;
+    }
+  }
+
   // ── Auth-Guard: Token sicherstellen (Prompt im TTY, sonst Fehler) ──
   const interactive = process.stdin.isTTY === true && process.stdout.isTTY === true;
   const tokenCheck = await ensurePrToken(config.prPlatform, { interactive });
@@ -600,9 +637,23 @@ async function main(): Promise<number> {
   // Abgebrochener Lauf (Ctrl+C): nicht verarbeitete RUs zählen nur als
   // "not processed" und würden Exit 0 ("Erfolg") liefern — für Skripte/CI
   // muss ein Abbruch aber als solcher erkennbar sein (dokumentiert: 130).
-  if (abortController.signal.aborted) return 130;
+  const exitCode = abortController.signal.aborted ? 130 : exitCodeFromSummary(summary);
 
-  return exitCodeFromSummary(summary);
+  // ── --report: maschinenlesbaren JSON-Report schreiben ──────────
+  if (opts.report !== undefined) {
+    try {
+      writeRunReport(opts.report, buildRunReport(config, summary, exitCode));
+      logger.info(`Run report written to ${opts.report}`);
+    } catch (err) {
+      // CI hat den Report explizit angefordert — ein Schreibfehler darf einen
+      // sonst grünen Lauf nicht still passieren lassen. Echte Lauf-Fehler
+      // (1/2/130) behalten aber Vorrang vor dem Setup-Fehler 3.
+      printError(`--report: cannot write "${opts.report}": ${(err as Error).message}`, useColor);
+      return exitCode !== 0 ? exitCode : 3;
+    }
+  }
+
+  return exitCode;
 }
 
 main()
