@@ -58,6 +58,13 @@ error (bad config, unknown `-Only` RU). The config format matches the Node versi
 (see the repo root [README](../README.md)); the code change is defined via `script:`
 **or** a declarative `operations:` chain.
 
+For CI pipelines, `-Report run.json` writes a machine-readable JSON report after the
+run (per-RU outcome + PR link/error, totals, exit code; versioned via `reportVersion`,
+never contains tokens) and `-RetryFailed run.json` re-runs only the RUs that failed
+(`pr-failed`, `fatal`, `push-failed` — node-report outcomes are accepted too, so the
+reports are interchangeable between both implementations). `-RetryFailed` excludes
+`-Only`.
+
 PR platforms: **Bitbucket** (Cloud/Server), **GitHub** (`.com`/Enterprise),
 **GitLab** (`.com`/self-hosted) and **Azure DevOps** (Services/Server) — create
 PRs/MRs and `-Status`. For GitLab use `prPlatform: gitlab` with a

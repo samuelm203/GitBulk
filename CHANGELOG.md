@@ -17,6 +17,9 @@ parity (the browser GUI and terminal TUI are Node-only).
 - **`--report <path>`** (Node CLI): write a machine-readable JSON run report for CI
   after a bulk run — per-RU outcome with PR link or error, totals, run metadata and
   the process exit code. Versioned via `reportVersion`; never contains tokens.
+- **`-Report` / `-RetryFailed`** (PowerShell port): the same CI report + retry flow
+  for `./gitbulk.ps1`. The retry reader accepts both implementations' outcome
+  vocabularies, so reports are interchangeable between Node and PowerShell.
 - **`--retry-failed <report.json>`** (Node CLI): re-run only the RUs that failed in
   a previous `--report` run (`pr-failed`, `fatal-error`, `not-processed`). Chains
   with `--report` to produce a fresh report of the retry.
