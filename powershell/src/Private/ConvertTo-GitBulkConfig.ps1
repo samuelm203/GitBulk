@@ -186,7 +186,22 @@ function ConvertTo-GitBulkConfig {
                 }
             }
             'azure-devops' {
-                $errors.Add("Error: Azure DevOps adapter is not yet implemented. Use prPlatform 'bitbucket', 'github' or 'gitlab'.")
+                $az = $Raw['azureDevOps']
+                if ($az -isnot [System.Collections.IDictionary]) {
+                    $errors.Add("Error: azureDevOps config is required when prPlatform is 'azure-devops'")
+                } else {
+                    if ([string]::IsNullOrWhiteSpace([string]$az['organization'])) { $errors.Add('Error: azureDevOps.organization is required') }
+                    if ([string]::IsNullOrWhiteSpace([string]$az['project'])) { $errors.Add('Error: azureDevOps.project is required') }
+                    $sub = [ordered]@{
+                        organization = [string]$az['organization']
+                        project      = [string]$az['project']
+                        # Node-Parität: Azure-Default ist 'master' (wie Bitbucket).
+                        targetBranch = if ([string]::IsNullOrWhiteSpace([string]$az['targetBranch'])) { 'master' } else { [string]$az['targetBranch'] }
+                        reviewers    = Get-GbReviewerList -Value $az['reviewers'] -Name 'azureDevOps.reviewers' -Errors $errors
+                    }
+                    if (-not [string]::IsNullOrWhiteSpace([string]$az['apiBaseUrl'])) { $sub.apiBaseUrl = [string]$az['apiBaseUrl'] }
+                    $cfg.azureDevOps = $sub
+                }
             }
         }
     }

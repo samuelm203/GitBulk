@@ -38,6 +38,14 @@ function Get-GitBulkPrStatus {
             }
             return Get-GitLabPrStatus -GitLabConfig $Config.gitlab -Token $token -Ru $Ru -SourceBranch $SourceBranch -Workspace $Workspace
         }
+        'azure-devops' {
+            if (-not $Config.Contains('azureDevOps')) { return @{ State = 'none'; Error = 'azureDevOps config is missing' } }
+            $token = $env:GITBULK_AZURE_DEVOPS_TOKEN
+            if ([string]::IsNullOrWhiteSpace($token)) {
+                return @{ State = 'none'; Error = 'Environment variable GITBULK_AZURE_DEVOPS_TOKEN is required for Azure DevOps PR status' }
+            }
+            return Get-AzureDevOpsPrStatus -AzureConfig $Config.azureDevOps -Token $token -Ru $Ru -SourceBranch $SourceBranch -Workspace $Workspace
+        }
         default {
             return @{ State = 'none'; Error = "status not supported for prPlatform '$($Config.prPlatform)'" }
         }

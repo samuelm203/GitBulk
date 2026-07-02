@@ -107,9 +107,11 @@ Describe 'gitbulk auth' {
         }
     }
 
-    It 'needs no token for a platform without an adapter (azure-devops)' {
+    It 'requires a token for azure-devops like any other platform' {
         InModuleScope GitBulk {
-            (Resolve-GitBulkToken -Platform azure-devops).Ok | Should -BeTrue
+            $r = Resolve-GitBulkToken -Platform azure-devops
+            $r.Ok | Should -BeFalse
+            $r.Error | Should -Match 'GITBULK_AZURE_DEVOPS_TOKEN'
         }
     }
 }

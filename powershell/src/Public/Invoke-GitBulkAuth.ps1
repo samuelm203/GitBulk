@@ -4,7 +4,7 @@ function Invoke-GitBulkAuth {
         Verwaltet persistent gespeicherte PR-Tokens (Pendant zu `gitbulk auth`).
 
     .DESCRIPTION
-        login  -Platform bitbucket|github   Token (maskiert) abfragen und speichern
+        login  -Platform bitbucket|github|gitlab|azure-devops   Token (maskiert) abfragen und speichern
         logout [-Platform <p>]              Token entfernen (ohne -Platform = alle)
         status                              zeigt, welche Tokens vorliegen
 
@@ -16,7 +16,8 @@ function Invoke-GitBulkAuth {
         'login', 'logout' oder 'status'.
 
     .PARAMETER Platform
-        Zielplattform ('bitbucket' / 'github'). Pflicht für login.
+        Zielplattform ('bitbucket' / 'github' / 'gitlab' / 'azure-devops').
+        Pflicht für login.
 
     .PARAMETER Interactive
         Darf maskiert nach dem Token gefragt werden? (echtes Terminal)
@@ -34,7 +35,7 @@ function Invoke-GitBulkAuth {
         [ValidateSet('login', 'logout', 'status')]
         [string]$Action,
 
-        [ValidateSet('bitbucket', 'github', 'gitlab')]
+        [ValidateSet('bitbucket', 'github', 'gitlab', 'azure-devops')]
         [string]$Platform,
 
         [switch]$Interactive,
@@ -46,7 +47,7 @@ function Invoke-GitBulkAuth {
     switch ($Action) {
         'login' {
             if ([string]::IsNullOrWhiteSpace($Platform)) {
-                return (fail '`-Auth login` requires -Platform bitbucket|github.')
+                return (fail '`-Auth login` requires -Platform bitbucket|github|gitlab|azure-devops.')
             }
             $varName = Get-GitBulkTokenEnvVar -Platform $Platform
             if (-not $Interactive) {
@@ -76,13 +77,14 @@ function Invoke-GitBulkAuth {
             Write-GitBulkLine -Message "Credential store: $(Get-GitBulkCredentialPath)" -NoColor:$NoColor
             Write-GitBulkLine -Message 'Resolution order: env var > stored token > interactive prompt' -NoColor:$NoColor
             Write-GitBulkLine -Message '' -NoColor:$NoColor
-            foreach ($p in @('bitbucket', 'github')) {
+            # Zentrale Plattform-Liste (Credentials.ps1) — vorher fehlte hier gitlab.
+            foreach ($p in $script:GitBulkTokenPlatforms) {
                 $varName = Get-GitBulkTokenEnvVar -Platform $p
                 $envSet = -not [string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($varName))
                 $hasStored = $stored -contains $p
                 $active = if ($envSet) { 'env var' } elseif ($hasStored) { 'stored' } else { 'none' }
                 $line = '  {0}  env:{1}  stored:{2}  -> {3}' -f `
-                    $p.PadRight(10), $(if ($envSet) { 'yes' } else { ' no' }), $(if ($hasStored) { 'yes' } else { ' no' }), $active
+                    $p.PadRight(12), $(if ($envSet) { 'yes' } else { ' no' }), $(if ($hasStored) { 'yes' } else { ' no' }), $active
                 Write-GitBulkLine -Message $line -NoColor:$NoColor
             }
             return 0

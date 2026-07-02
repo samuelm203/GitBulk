@@ -58,11 +58,16 @@ error (bad config, unknown `-Only` RU). The config format matches the Node versi
 (see the repo root [README](../README.md)); the code change is defined via `script:`
 **or** a declarative `operations:` chain.
 
-PR platforms: **Bitbucket** (Cloud/Server), **GitHub** (`.com`/Enterprise) and
-**GitLab** (`.com`/self-hosted) — create PRs/MRs and `-Status`. For GitLab use
-`prPlatform: gitlab` with a `gitlab: { namespace, targetBranch, reviewers, apiBaseUrl? }`
-block (project = `namespace/repo`, reviewers = numeric user IDs, token from
-`GITBULK_GITLAB_TOKEN`).
+PR platforms: **Bitbucket** (Cloud/Server), **GitHub** (`.com`/Enterprise),
+**GitLab** (`.com`/self-hosted) and **Azure DevOps** (Services/Server) — create
+PRs/MRs and `-Status`. For GitLab use `prPlatform: gitlab` with a
+`gitlab: { namespace, targetBranch, reviewers, apiBaseUrl? }` block (project =
+`namespace/repo`, reviewers = numeric user IDs, token from `GITBULK_GITLAB_TOKEN`).
+For Azure DevOps use `prPlatform: azure-devops` with an
+`azureDevOps: { organization, project, targetBranch, reviewers, apiBaseUrl? }` block
+(repo = `organization/project/<repo>`, reviewers = user GUIDs, PAT from
+`GITBULK_AZURE_DEVOPS_TOKEN`; on-prem: `apiBaseUrl` = instance root **without** the
+collection, the collection goes in `organization`).
 
 **PR tokens** are never read from the config. At run time the resolution order is
 **environment variable → stored token → interactive prompt** (a `-DryRun` needs no

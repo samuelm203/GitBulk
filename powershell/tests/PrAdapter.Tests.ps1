@@ -145,11 +145,11 @@ InModuleScope GitBulk {
             $r.Error | Should -Match 'GITBULK_GITHUB_TOKEN'
         }
 
-        It 'reports the not-implemented Azure DevOps adapter' {
+        It 'reports a missing azureDevOps config block' {
             $cfg = @{ prPlatform = 'azure-devops' }
             $r = New-GitBulkPullRequest -Config $cfg -Ru 'r' -SourceBranch 'feat' -Title 'T'
             $r.Ok | Should -BeFalse
-            $r.Error | Should -Match 'not yet implemented'
+            $r.Error | Should -Match 'azureDevOps config is missing'
         }
     }
 }
