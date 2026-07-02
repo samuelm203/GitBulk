@@ -20,6 +20,10 @@ parity (the browser GUI and terminal TUI are Node-only).
 - **`--retry-failed <report.json>`** (Node CLI): re-run only the RUs that failed in
   a previous `--report` run (`pr-failed`, `fatal-error`, `not-processed`). Chains
   with `--report` to produce a fresh report of the retry.
+- **`gitbulk init` platform choice** (Node CLI): the interactive generator now asks
+  for the PR platform (Bitbucket, GitHub, GitLab or Azure DevOps) and its addressing
+  fields, and emits the matching config sub-block — previously it always generated a
+  Bitbucket config.
 
 ## [1.1.0] - 2026-07-02
 
