@@ -396,6 +396,10 @@ gitbulk [options]
       --deep-log         Record a granular step-by-step log; at the end choose [D]ownload
                          (writes ./gitbulk/gitbulk-log-<ts>.log) or [P]rint. Non-TTY: file.
       --only <rus>       Only process these RUs (comma-separated subset of the configured RUs)
+      --report <path>    Write a machine-readable JSON run report after the run (for CI):
+                         per-RU outcome + PR link/error, totals and the exit code
+      --retry-failed <report.json>  Re-run only the RUs that failed in a previous
+                         --report run (pr-failed, fatal-error, not-processed)
   -l, --log-level <lvl>  debug | info | warn | error. Default: info
       --no-color         Disable colored output
   -v, --version          Print version and exit
@@ -494,6 +498,19 @@ env var always wins (handy for CI).
 
 Use `--only` to run a subset without editing the config, e.g.
 `gitbulk --config gitbulk.yaml --only service-api,service-worker --dry-run`.
+
+For CI pipelines, `--report` writes a machine-readable JSON report (per-RU outcome,
+PR link or error, totals, exit code) and `--retry-failed` chains onto it:
+
+```bash
+gitbulk --config gitbulk.yaml --report run.json          # full run + report
+gitbulk --config gitbulk.yaml --retry-failed run.json \
+        --report retry.json                              # re-run only the failures
+```
+
+Retried are RUs with outcome `pr-failed`, `fatal-error` or `not-processed`
+(e.g. after Ctrl+C); `pr-created` and `pr-skipped` (no diff) are left alone.
+The report format is versioned via `reportVersion` and never contains tokens.
 
 The CLI is parsed with Node's built-in `node:util` `parseArgs` (no external argument parser).
 Subcommand-only flags used in the wrong context (e.g. `--json` outside `list-operations`) are

@@ -12,6 +12,15 @@ parity (the browser GUI and terminal TUI are Node-only).
 
 ## [Unreleased]
 
+### Added
+
+- **`--report <path>`** (Node CLI): write a machine-readable JSON run report for CI
+  after a bulk run — per-RU outcome with PR link or error, totals, run metadata and
+  the process exit code. Versioned via `reportVersion`; never contains tokens.
+- **`--retry-failed <report.json>`** (Node CLI): re-run only the RUs that failed in
+  a previous `--report` run (`pr-failed`, `fatal-error`, `not-processed`). Chains
+  with `--report` to produce a fresh report of the retry.
+
 ## [1.1.0] - 2026-07-02
 
 ### Added
