@@ -10,6 +10,8 @@ implementation in [`node_ts/`](./node_ts) (published to npm as
 native PowerShell port in [`powershell/`](./powershell). Both are kept at feature
 parity (the browser GUI and terminal TUI are Node-only).
 
+## [Unreleased]
+
 ## [1.1.0] - 2026-07-02
 
 ### Added
