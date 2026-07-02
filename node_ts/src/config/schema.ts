@@ -80,9 +80,11 @@ export type BitbucketConfig = z.infer<typeof BitbucketConfigSchema>;
 /**
  * Azure-DevOps-PR-Konfiguration.
  *
- * `organization` + `project` adressieren das Repo (`repo` = RU-Name). Für Azure
- * DevOps Server (on-prem) setzt man `apiBaseUrl` auf die Collection-URL, z. B.
- * `https://tfs.example.com/tfs/DefaultCollection`. `targetBranch` ist der
+ * `organization` + `project` adressieren das Repo (`repo` = RU-Name); die
+ * API-Basis ist `{apiBaseUrl}/{organization}` (Default-`apiBaseUrl`:
+ * `https://dev.azure.com`). Für Azure DevOps Server (on-prem) zeigt `apiBaseUrl`
+ * auf die Instanz-Wurzel OHNE Collection (z. B. `https://tfs.example.com/tfs`) und
+ * die Collection wird als `organization` gesetzt. `targetBranch` ist der
  * Ziel-Branch (default `master`); `reviewers` sind Azure-User-IDs (GUIDs).
  * Token: `GITBULK_AZURE_DEVOPS_TOKEN` (PAT).
  */

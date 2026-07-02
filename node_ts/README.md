@@ -229,11 +229,12 @@ bitbucket:
 # For Azure DevOps, use prPlatform: azure-devops and an azureDevOps block instead:
 # prPlatform: azure-devops
 # azureDevOps:
-#   organization: my-org        # dev.azure.com/<organization>
+#   organization: my-org        # cloud: dev.azure.com/<organization>; on-prem: the collection name
 #   project: my-project         # repo is addressed as <organization>/<project>/<repo>
 #   targetBranch: main
 #   reviewers: []               # Azure user IDs (GUIDs)
-#   # apiBaseUrl: https://tfs.example.com/tfs/DefaultCollection   # Azure DevOps Server only
+#   # apiBaseUrl: https://tfs.example.com/tfs   # Azure DevOps Server: instance root WITHOUT the collection
+#   #                                           # (the collection goes in "organization" above)
 ```
 
 ### Field reference
@@ -261,7 +262,7 @@ bitbucket:
 | `bitbucket`        | cond.    | —           | `{ workspace, apiVariant: cloud\|server, targetBranch: master, reviewers: [], apiBaseUrl? }`. Required when `prPlatform: bitbucket`. Token from `GITBULK_BITBUCKET_TOKEN`. |
 | `github`           | cond.    | —           | `{ owner, targetBranch: main, reviewers: [], apiBaseUrl? }`. Required when `prPlatform: github`. Token from `GITBULK_GITHUB_TOKEN`. |
 | `gitlab`           | cond.    | —           | `{ namespace, targetBranch: main, reviewers: [], apiBaseUrl? }` (reviewers = numeric user IDs; project = `namespace/repo`). Required when `prPlatform: gitlab`. Token from `GITBULK_GITLAB_TOKEN`. |
-| `azureDevOps`      | cond.    | —           | `{ organization, project, targetBranch: master, reviewers: [], apiBaseUrl? }` (reviewers = user GUIDs; repo = `organization/project/<ru>`, per-RU `workspace` overrides the project). Required when `prPlatform: azure-devops`. Token (PAT) from `GITBULK_AZURE_DEVOPS_TOKEN`. |
+| `azureDevOps`      | cond.    | —           | `{ organization, project, targetBranch: master, reviewers: [], apiBaseUrl? }` (reviewers = user GUIDs; repo = `organization/project/<ru>`, per-RU `workspace` overrides the project). API base is `<apiBaseUrl>/<organization>`; on-prem set `apiBaseUrl` to the instance root **without** the collection and put the collection in `organization`. Required when `prPlatform: azure-devops`. Token (PAT) from `GITBULK_AZURE_DEVOPS_TOKEN`. |
 
 See [`examples/`](./examples) for ready-to-copy configs (YAML, JSON, JS, TS), a
 declarative-operations config (`gitbulk.operations.yaml`), and example code-change scripts

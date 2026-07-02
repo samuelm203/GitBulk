@@ -2,7 +2,10 @@
  * Azure-DevOps-Adapter für Pull Requests.
  *
  * Unterstützt Azure DevOps Services (dev.azure.com) und Azure DevOps Server
- * (on-prem, via `apiBaseUrl`, z. B. `https://tfs.example.com/tfs/DefaultCollection`).
+ * (on-prem). Die API-Basis ist stets `{apiBaseUrl}/{organization}` — für die Cloud
+ * also `https://dev.azure.com/{organization}`. Für on-prem zeigt `apiBaseUrl` auf
+ * die Instanz-Wurzel OHNE Collection (z. B. `https://tfs.example.com/tfs`) und die
+ * Collection wird als `organization` gesetzt (ergibt `…/tfs/DefaultCollection`).
  *
  * Adressierung: Ein Repo wird über `{organization}/{project}/_apis/git/
  * repositories/{repo}` angesprochen. Der `project` kommt aus der Sub-Config; ein
