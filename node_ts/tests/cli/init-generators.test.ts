@@ -112,6 +112,56 @@ describe('config-generator', () => {
     assert.equal(parsed.commitMessage, 'feat: add dep');
     assert.equal(parsed.prSummary, 'Add dependency');
   });
+
+  it('emits a github block with owner + targetBranch main (schema-valid)', () => {
+    const yaml = generateYamlConfig({ ...baseInput, prPlatform: 'github', githubOwner: 'my-org' });
+    assert.match(yaml, /GITBULK_GITHUB_TOKEN/);
+    const parsed = parseYaml(yaml) as Record<string, unknown>;
+    assert.deepEqual(parsed.github, { owner: 'my-org', targetBranch: 'main' });
+    assert.equal(parsed.bitbucket, undefined);
+    const result = GitBulkConfigSchema.safeParse(parsed);
+    assert.equal(result.success, true, JSON.stringify(result, null, 2));
+  });
+
+  it('emits a gitlab block with namespace + targetBranch main (schema-valid)', () => {
+    const yaml = generateYamlConfig({
+      ...baseInput,
+      prPlatform: 'gitlab',
+      gitlabNamespace: 'my-group',
+    });
+    assert.match(yaml, /GITBULK_GITLAB_TOKEN/);
+    const parsed = parseYaml(yaml) as Record<string, unknown>;
+    assert.deepEqual(parsed.gitlab, { namespace: 'my-group', targetBranch: 'main' });
+    const result = GitBulkConfigSchema.safeParse(parsed);
+    assert.equal(result.success, true, JSON.stringify(result, null, 2));
+  });
+
+  it('emits an azureDevOps block with organization/project + targetBranch master (schema-valid)', () => {
+    const yaml = generateYamlConfig({
+      ...baseInput,
+      prPlatform: 'azure-devops',
+      azureOrganization: 'my-org',
+      azureProject: 'my-proj',
+    });
+    assert.match(yaml, /GITBULK_AZURE_DEVOPS_TOKEN/);
+    const parsed = parseYaml(yaml) as Record<string, unknown>;
+    assert.deepEqual(parsed.azureDevOps, {
+      organization: 'my-org',
+      project: 'my-proj',
+      targetBranch: 'master',
+    });
+    const result = GitBulkConfigSchema.safeParse(parsed);
+    assert.equal(result.success, true, JSON.stringify(result, null, 2));
+  });
+
+  it('falls back to placeholders when platform fields are missing', () => {
+    const cfg = buildConfigObject({ ...baseInput, prPlatform: 'azure-devops' });
+    assert.deepEqual(cfg.azureDevOps, {
+      organization: 'YOUR_ORGANIZATION',
+      project: 'YOUR_PROJECT',
+      targetBranch: 'master',
+    });
+  });
 });
 
 // ── config-generator: script-Variante (beides-Modus) ────────────────
