@@ -58,9 +58,17 @@ function New-GitBulkPullRequest {
                 -Ru $Ru -SourceBranch $SourceBranch -Title $Title -Description $Description -Workspace $Workspace
         }
         'azure-devops' {
-            return @{ Ok = $false; Id = $null; Url = ''; StatusCode = 0
-                Error = 'Azure DevOps adapter is not yet implemented'
+            if (-not $Config.Contains('azureDevOps')) {
+                return @{ Ok = $false; Id = $null; Url = ''; StatusCode = 0; Error = 'azureDevOps config is missing' }
             }
+            $token = $env:GITBULK_AZURE_DEVOPS_TOKEN
+            if ([string]::IsNullOrWhiteSpace($token)) {
+                return @{ Ok = $false; Id = $null; Url = ''; StatusCode = 0
+                    Error = 'Environment variable GITBULK_AZURE_DEVOPS_TOKEN is required for Azure DevOps PR creation'
+                }
+            }
+            return New-AzureDevOpsPullRequest -AzureConfig $Config.azureDevOps -Token $token `
+                -Ru $Ru -SourceBranch $SourceBranch -Title $Title -Description $Description -Workspace $Workspace
         }
         default {
             return @{ Ok = $false; Id = $null; Url = ''; StatusCode = 0

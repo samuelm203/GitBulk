@@ -20,8 +20,8 @@ parity (the browser GUI and terminal TUI are Node-only).
   Azure DevOps Server (on-prem via `apiBaseUrl`). A repo is addressed as
   `organization/project/<repo>`, per-RU `workspace` overrides the project, the PAT
   comes from `GITBULK_AZURE_DEVOPS_TOKEN`, and
-  `gitbulk auth login --platform azure-devops` stores it. Node CLI (PowerShell port
-  to follow).
+  `gitbulk auth login --platform azure-devops` stores it. In **both** the Node CLI
+  and the PowerShell port.
 - **GitLab support** (`prPlatform: gitlab`): create merge requests (with
   create-vs-update detection) and `gitbulk status` (state + approvals + CI rollup)
   against gitlab.com and self-hosted instances. Project = `<namespace>/<repo>`,

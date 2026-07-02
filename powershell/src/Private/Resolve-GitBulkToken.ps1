@@ -6,13 +6,14 @@
 # NIE geloggt.
 
 function Get-GitBulkTokenEnvVar {
-    # Name der Env-Variable je Plattform — oder $null für Plattformen ohne Token
-    # (azure-devops: Adapter noch nicht implementiert, daher hier nicht abfragen).
+    # Name der Env-Variable je Plattform — oder $null für unbekannte Plattformen
+    # (der Adapter meldet sich dann selbst).
     param([Parameter(Mandatory)][string]$Platform)
     switch ($Platform) {
         'bitbucket' { return 'GITBULK_BITBUCKET_TOKEN' }
         'github' { return 'GITBULK_GITHUB_TOKEN' }
         'gitlab' { return 'GITBULK_GITLAB_TOKEN' }
+        'azure-devops' { return 'GITBULK_AZURE_DEVOPS_TOKEN' }
         default { return $null }
     }
 }
@@ -43,7 +44,7 @@ function Resolve-GitBulkToken {
     )
 
     $varName = Get-GitBulkTokenEnvVar -Platform $Platform
-    # Plattform ohne definierten Token (z. B. azure-devops): der Adapter meldet sich selbst.
+    # Unbekannte Plattform ohne definierten Token: der Adapter meldet sich selbst.
     if ($null -eq $varName) { return @{ Ok = $true } }
 
     $current = [Environment]::GetEnvironmentVariable($varName)

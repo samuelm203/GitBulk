@@ -12,8 +12,8 @@
 # Speicherort über GITBULK_HOME umlenkbar (auch für Tests). Tokens werden NIE
 # geloggt.
 
-# Plattformen mit Token-Unterstützung (Azure DevOps: noch kein Adapter).
-$script:GitBulkTokenPlatforms = @('bitbucket', 'github', 'gitlab')
+# Plattformen mit Token-Unterstützung.
+$script:GitBulkTokenPlatforms = @('bitbucket', 'github', 'gitlab', 'azure-devops')
 
 function Get-GitBulkCredentialDir {
     # GITBULK_HOME übersteuert ~/.gitbulk (für Tests / Custom-Setups).
