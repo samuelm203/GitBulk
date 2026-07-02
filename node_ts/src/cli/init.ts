@@ -39,7 +39,7 @@ import {
   type ScriptOperation,
   type ScriptLanguage,
 } from './script-generator.js';
-import { generateYamlConfig } from './config-generator.js';
+import { generateYamlConfig, type InitPrPlatform } from './config-generator.js';
 
 /**
  * Standard-Zielordner für generierte Configs/Skripte. Hält alle GitBulk-
@@ -217,7 +217,40 @@ interface PromptedConfigFields {
   commitMessage: string;
   prSummary: string;
   createPrOnError: boolean;
-  bitbucketWorkspace: string;
+  prPlatform: InitPrPlatform;
+  bitbucketWorkspace?: string;
+  githubOwner?: string;
+  gitlabNamespace?: string;
+  azureOrganization?: string;
+  azureProject?: string;
+}
+
+/** Nicht-leerer-String-Validator für die Plattform-Felder. */
+function validateNonEmpty(label: string) {
+  return (raw: string): { ok: true; value: string } | { ok: false; error: string } =>
+    raw.trim().length > 0
+      ? { ok: true, value: raw.trim() }
+      : { ok: false, error: `${label} must not be empty.` };
+}
+
+/** Fragt die PR-Plattform (1–4) ab. */
+async function promptPlatform(rl: Interface): Promise<InitPrPlatform> {
+  const choices: Record<string, InitPrPlatform> = {
+    '1': 'bitbucket',
+    '2': 'github',
+    '3': 'gitlab',
+    '4': 'azure-devops',
+  };
+  return promptUntilValid(
+    rl,
+    'PR platform — 1) Bitbucket  2) GitHub  3) GitLab  4) Azure DevOps:',
+    (raw) => {
+      const value = choices[raw.trim()];
+      return value !== undefined
+        ? { ok: true as const, value }
+        : { ok: false as const, error: 'Enter 1, 2, 3 or 4.' };
+    },
+  );
 }
 
 /** Fragt die gemeinsamen Config-Felder ab (geteilt von Config- und beides-Modus). */
@@ -234,16 +267,50 @@ async function promptConfigFields(rl: Interface): Promise<PromptedConfigFields> 
     'If a code change fails, make a PR anyway (Y/N)?',
     validateYesNo,
   );
-  const bitbucketWorkspace = await promptUntilValid(
-    rl,
-    'Bitbucket workspace (slug or project key):',
-    (raw) =>
-      raw.trim().length > 0
-        ? { ok: true as const, value: raw.trim() }
-        : { ok: false as const, error: 'Workspace must not be empty.' },
-  );
 
-  return { rus, ticket, branch, commitMessage, prSummary, createPrOnError, bitbucketWorkspace };
+  const prPlatform = await promptPlatform(rl);
+  const fields: PromptedConfigFields = {
+    rus, ticket, branch, commitMessage, prSummary, createPrOnError, prPlatform,
+  };
+  // Plattform-spezifische Adressierung (exactOptionalPropertyTypes: nur setzen,
+  // was die gewählte Plattform braucht).
+  switch (prPlatform) {
+    case 'bitbucket':
+      fields.bitbucketWorkspace = await promptUntilValid(
+        rl,
+        'Bitbucket workspace (slug or project key):',
+        validateNonEmpty('Workspace'),
+      );
+      break;
+    case 'github':
+      fields.githubOwner = await promptUntilValid(
+        rl,
+        'GitHub owner (user or organization):',
+        validateNonEmpty('Owner'),
+      );
+      break;
+    case 'gitlab':
+      fields.gitlabNamespace = await promptUntilValid(
+        rl,
+        'GitLab namespace (group or user):',
+        validateNonEmpty('Namespace'),
+      );
+      break;
+    case 'azure-devops':
+      fields.azureOrganization = await promptUntilValid(
+        rl,
+        'Azure DevOps organization:',
+        validateNonEmpty('Organization'),
+      );
+      fields.azureProject = await promptUntilValid(
+        rl,
+        'Azure DevOps project:',
+        validateNonEmpty('Project'),
+      );
+      break;
+  }
+
+  return fields;
 }
 
 /** Schreibt die YAML-Config (Operationen-Variante). */
@@ -256,7 +323,6 @@ async function exportConfig(
 
   const yaml = generateYamlConfig({
     ...f,
-    prPlatform: 'bitbucket',
     operations: operations.map((o) => ({ type: o.type, ...o.params })),
   });
 
@@ -321,7 +387,7 @@ async function exportBoth(
 
   // Config-Felder erfragen und Config mit `script:` schreiben.
   const f = await promptConfigFields(rl);
-  const yaml = generateYamlConfig({ ...f, prPlatform: 'bitbucket', script: scriptRel });
+  const yaml = generateYamlConfig({ ...f, script: scriptRel });
 
   mkdirSync(dirname(configTarget), { recursive: true });
   writeFileSync(configTarget, yaml);

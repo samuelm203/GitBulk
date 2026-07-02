@@ -359,6 +359,10 @@ schema), and writes one of:
    resulting script afterwards. The config references the script by its path relative to where you
    run `gitbulk` (e.g. `script: gitbulk/gitbulk-change.mjs`).
 
+For the config variants it also asks for the **PR platform** (Bitbucket, GitHub, GitLab or
+Azure DevOps) and the platform's addressing fields (workspace / owner / namespace /
+organization + project), and emits the matching sub-block with a sensible `targetBranch` default.
+
 It then asks for the **file name** (with a sensible default) and writes the file into a fixed
 **`gitbulk/`** directory (created if missing). If the target already exists, GitBulk does **not**
 overwrite it — it picks the next free name instead (`gitbulk.config.yaml` → `gitbulk.config2.yaml`
