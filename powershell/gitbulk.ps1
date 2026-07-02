@@ -9,6 +9,10 @@
     ./gitbulk.ps1 -Config ./gitbulk.config.json -Only repo-a,repo-b
 
 .EXAMPLE
+    ./gitbulk.ps1 -Config ./gitbulk.config.yaml -Report run.json
+    ./gitbulk.ps1 -Config ./gitbulk.config.yaml -RetryFailed run.json -Report retry.json
+
+.EXAMPLE
     ./gitbulk.ps1 -ListOperations
     ./gitbulk.ps1 -ListOperations -Json
 
@@ -28,6 +32,12 @@ param(
 
     [Parameter(ParameterSetName = 'Run')]
     [switch]$DryRun,
+
+    [Parameter(ParameterSetName = 'Run')]
+    [string]$Report,
+
+    [Parameter(ParameterSetName = 'Run')]
+    [string]$RetryFailed,
 
     [Parameter(ParameterSetName = 'Run')]
     [Parameter(ParameterSetName = 'Status')]
@@ -111,5 +121,6 @@ if ($Status) {
     exit 0
 }
 
-$code = Invoke-GitBulk -ConfigPath $Config -DryRun:$DryRun -Only $Only -NoColor:$NoColor
+$code = Invoke-GitBulk -ConfigPath $Config -DryRun:$DryRun -Only $Only `
+    -Report $Report -RetryFailed $RetryFailed -NoColor:$NoColor
 exit $code

@@ -22,6 +22,14 @@ function Invoke-GitBulk {
     .PARAMETER Only
         Nur diese RUs verarbeiten (komma-separierte Teilmenge der konfigurierten RUs).
 
+    .PARAMETER Report
+        Schreibt nach dem Lauf einen maschinenlesbaren JSON-Report (für CI):
+        pro RU Outcome + PR-Link/Fehler, Totals, Metadaten und Exit-Code.
+
+    .PARAMETER RetryFailed
+        Pfad zu einem früheren -Report-JSON: nur die dort fehlgeschlagenen RUs
+        (pr-failed / fatal / push-failed) erneut verarbeiten. Schließt -Only aus.
+
     .PARAMETER NoColor
         Report ohne Farben ausgeben.
     #>
@@ -33,6 +41,8 @@ function Invoke-GitBulk {
 
         [switch]$DryRun,
         [string]$Only,
+        [string]$Report,
+        [string]$RetryFailed,
         [switch]$NoColor
     )
 
@@ -40,6 +50,11 @@ function Invoke-GitBulk {
     # $ErrorActionPreference='Stop', wodurch Write-Error terminating würde und
     # den garantierten Exit-Code verhinderte.
     function writeErrLine([string]$Message) { [Console]::Error.WriteLine("gitbulk: $Message") }
+
+    if ($RetryFailed -and $Only) {
+        writeErrLine '-RetryFailed and -Only are mutually exclusive.'
+        return 3
+    }
 
     # ── 1. Config laden ──────────────────────────────────────────────
     try {
@@ -67,6 +82,26 @@ function Invoke-GitBulk {
         $config.rus = $filtered
     }
 
+    # ── 2a. -RetryFailed: nur die Fehlschläge eines früheren Reports ──
+    if ($RetryFailed) {
+        try {
+            $retryRus = @(Get-GitBulkRetryRus -ReportPath $RetryFailed)
+        } catch {
+            writeErrLine $_.Exception.Message
+            return 3
+        }
+        if ($retryRus.Count -eq 0) {
+            Write-GitBulkLine -Message 'Nothing to retry — the report contains no failed RUs.' -NoColor:$NoColor
+            return 0
+        }
+        $unknown = @($retryRus | Where-Object { $_ -notin $config.rus })
+        if ($unknown.Count -gt 0) {
+            writeErrLine "-RetryFailed: unknown RU(s): $($unknown -join ', '). Configured: $($config.rus -join ', ')"
+            return 3
+        }
+        $config.rus = @($config.rus | Where-Object { $_ -in $retryRus })
+    }
+
     # ── 2b. Token-Guard: env > gespeicherter Token > interaktive Abfrage ──
     # Im Dry-Run wird kein Token verlangt (keine PR-API-Aufrufe).
     $interactive = -not [Console]::IsInputRedirected
@@ -80,6 +115,7 @@ function Invoke-GitBulk {
     # ── 3./4. Lauf + Report ──────────────────────────────────────────
     # Unerwartete Fehler werden zu Exit 2 (fatal) — der CLI-Einstiegspunkt
     # soll nie unkontrolliert werfen.
+    $startedAt = [DateTime]::UtcNow
     try {
         $summary = Invoke-GitBulkRun -Config $config
         Write-GitBulkSummary -Summary $summary -NoColor:$NoColor
@@ -87,9 +123,27 @@ function Invoke-GitBulk {
         writeErrLine "unexpected error during run: $($_.Exception.Message)"
         return 2
     }
+    $finishedAt = [DateTime]::UtcNow
 
     # ── 5. Exit-Code ─────────────────────────────────────────────────
-    if ($summary.Fatal -gt 0) { return 2 }
-    if ($summary.PrFailed -gt 0) { return 1 }
-    return 0
+    $exitCode = if ($summary.Fatal -gt 0) { 2 } elseif ($summary.PrFailed -gt 0) { 1 } else { 0 }
+
+    # ── 6. -Report: maschinenlesbaren JSON-Report schreiben ─────────
+    if ($Report) {
+        try {
+            $reportObj = Get-GitBulkRunReport -Config $config -Summary $summary -ExitCode $exitCode `
+                -StartedAt $startedAt -FinishedAt $finishedAt
+            Write-GitBulkRunReport -Path $Report -Report $reportObj
+            Write-GitBulkLine -Message "Run report written to $Report" -NoColor:$NoColor
+        } catch {
+            # CI hat den Report explizit angefordert — ein Schreibfehler darf einen
+            # sonst grünen Lauf nicht still passieren lassen. Echte Lauf-Fehler
+            # (1/2) behalten aber Vorrang vor dem Setup-Fehler 3.
+            writeErrLine "-Report: cannot write '$Report': $($_.Exception.Message)"
+            if ($exitCode -ne 0) { return $exitCode }
+            return 3
+        }
+    }
+
+    return $exitCode
 }
