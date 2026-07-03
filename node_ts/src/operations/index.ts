@@ -18,6 +18,7 @@ import './regex-replace.js';
 import './npm-add-dependency.js';
 import './npm-update.js';
 import './json-patch.js';
+import './yaml-patch.js';
 
 // Re-Export der Registry-API für bequemen Zugriff.
 export {
