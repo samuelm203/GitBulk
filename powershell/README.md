@@ -5,8 +5,8 @@ A **native PowerShell port** of [GitBulk](../README.md) — same bulk Git workfl
 Node runtime required.
 
 > **Status:** functionally on par with the Node version. The end-to-end flow works
-> (config → run across RUs → commit/push → open PRs on GitHub/GitLab/Bitbucket), all eight
-> declarative `operations:` are ported (file, npm, json and maven), discoverable via
+> (config → run across RUs → commit/push → open PRs on GitHub/GitLab/Bitbucket), all nine
+> declarative `operations:` are ported (file, npm, json, yaml and maven), discoverable via
 > `-ListOperations`, an interactive `-Init` generator scaffolds an `operations:`
 > config, and `-Template` prints a ready-to-edit config without prompts. (The Node
 > `init` can also emit a standalone script; the PowerShell port only generates the
@@ -97,6 +97,7 @@ not escape via `..`). Available operations:
 | `npm-add-dependency` | Add a dependency to `package.json` (`field`: dependencies/devDependencies/peerDependencies) |
 | `npm-update` | Update the version of an existing dependency in `package.json` |
 | `json-patch` | Set a value at a dot-path in a JSON file (`value` parsed as JSON if possible) |
+| `yaml-patch` | Set a value at a dot-path in a YAML file (`value` parsed as JSON if possible; requires `powershell-yaml`, re-serializes — comments are not preserved, unlike the Node version) |
 | `maven-add-dependency` | Add a Maven dependency to `pom.xml` (before the project `</dependencies>`) |
 
 JSON edits keep the file's existing indentation and key order; npm/json operations

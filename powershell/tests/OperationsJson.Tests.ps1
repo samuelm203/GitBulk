@@ -237,5 +237,49 @@ InModuleScope GitBulk {
                 $res.Message | Should -Match 'No pom.xml found'
             }
         }
+
+        Context 'yaml-patch' {
+            It 'sets a value at a dot-path, creating intermediate maps' {
+                $root = newRepoDir
+                writeText (Join-Path $root 'values.yaml') "name: app`n"
+                $res = applyOp -Type 'yaml-patch' -Params @{ path = 'values.yaml'; pointer = 'image.tag'; value = 'latest' } -RepoDir $root
+                $res.Changed | Should -BeTrue
+                $data = ConvertFrom-Yaml (readText (Join-Path $root 'values.yaml'))
+                $data.image.tag | Should -Be 'latest'
+                $data.name | Should -Be 'app'
+            }
+            It 'coerces JSON values (boolean / number)' {
+                $root = newRepoDir
+                writeText (Join-Path $root 'values.yaml') "name: app`n"
+                applyOp -Type 'yaml-patch' -Params @{ path = 'values.yaml'; pointer = 'enabled'; value = 'true' } -RepoDir $root | Out-Null
+                applyOp -Type 'yaml-patch' -Params @{ path = 'values.yaml'; pointer = 'limits.retries'; value = '3' } -RepoDir $root | Out-Null
+                $data = ConvertFrom-Yaml (readText (Join-Path $root 'values.yaml'))
+                $data.enabled | Should -BeTrue
+                $data.limits.retries | Should -Be 3
+            }
+            It 'is idempotent when the value already matches' {
+                $root = newRepoDir
+                writeText (Join-Path $root 'values.yaml') "enabled: true`n"
+                $res = applyOp -Type 'yaml-patch' -Params @{ path = 'values.yaml'; pointer = 'enabled'; value = 'true' } -RepoDir $root
+                $res.Changed | Should -BeFalse
+                $res.Message | Should -Match 'already set'
+            }
+            It 'skips when the file is missing' {
+                $root = newRepoDir
+                $res = applyOp -Type 'yaml-patch' -Params @{ path = 'values.yaml'; pointer = 'a'; value = 'x' } -RepoDir $root
+                $res.Changed | Should -BeFalse
+                $res.Message | Should -Match 'No values.yaml found'
+            }
+            It 'errors on invalid YAML without writing' {
+                $root = newRepoDir
+                $file = Join-Path $root 'values.yaml'
+                writeText $file "foo: [unclosed`n  bar: broken`n"
+                $before = readText $file
+                $res = applyOp -Type 'yaml-patch' -Params @{ path = 'values.yaml'; pointer = 'a'; value = 'x' } -RepoDir $root
+                $res.Changed | Should -BeFalse
+                $res.Error | Should -Match 'invalid YAML'
+                (readText $file) | Should -Be $before
+            }
+        }
     }
 }
