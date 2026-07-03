@@ -11,6 +11,7 @@
  */
 
 import './maven-add-dependency.js';
+import './gradle-add-dependency.js';
 import './add-file.js';
 import './replace-file.js';
 import './delete-file.js';
