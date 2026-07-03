@@ -45,7 +45,7 @@ import { runGui } from '../gui/index.js';
 import { runInitGenerator } from './init.js';
 import { runListOperations } from './list-operations.js';
 import { runAuth } from './auth.js';
-import { runTemplate } from './template.js';
+import { runTemplate, TEMPLATE_PLATFORMS } from './template.js';
 import { runStatus } from './status.js';
 import { filterRus } from './filter-rus.js';
 import { readFailedRus } from './retry-failed.js';
@@ -87,6 +87,7 @@ init options:
 template options:
       --full             Emit the full template with every field + comments (default)
       --minimal          Emit only the required fields
+      --platform <p>     Platform block: bitbucket | github | gitlab | azure-devops
   -o, --output <path>    Write to a file instead of stdout
   -f, --force            Overwrite the output file if it exists
 
@@ -136,17 +137,19 @@ const TEMPLATE_HELP = `gitbulk template — Print a ready-to-edit GitBulk config
 
 Unlike \`gitbulk init\` (interactive), this just emits a schema-valid YAML config.
 The default is the full template (every field + comments); --minimal emits only
-the required fields. Tokens are NEVER part of the template — they come from env
-vars (GITBULK_BITBUCKET_TOKEN / GITBULK_GITHUB_TOKEN).
+the required fields. --platform picks the PR platform block (default: bitbucket).
+Tokens are NEVER part of the template — they come from env vars.
 
 Usage:
   gitbulk template                 Print the full template to stdout
   gitbulk template --minimal       Print only the required fields
+  gitbulk template --platform gitlab   Emit a GitLab platform block instead
   gitbulk template -o gitbulk.yaml Write to a file (-f/--force to overwrite)
 
 Options:
       --full             Emit the full template with every field + comments (default)
       --minimal          Emit only the required fields
+      --platform <p>     Platform block: bitbucket | github | gitlab | azure-devops
   -o, --output <path>    Write to a file instead of stdout
   -f, --force            Overwrite the output file if it exists
       --no-color         Disable colored output
@@ -336,7 +339,7 @@ async function main(): Promise<number> {
       process.stdout.write(TEMPLATE_HELP);
       return 0;
     }
-    const templateInvalid = ['json', 'platform'].filter((o) => provided.has(o));
+    const templateInvalid = ['json'].filter((o) => provided.has(o));
     if (templateInvalid.length > 0) {
       return usageError(
         `Option(s) ${templateInvalid.map((o) => `--${o}`).join(', ')} are not valid for \`template\`.`,
@@ -347,6 +350,14 @@ async function main(): Promise<number> {
     if (values.full && values.minimal) {
       return usageError('`--full` and `--minimal` are mutually exclusive.');
     }
+    if (
+      values.platform !== undefined &&
+      !(TEMPLATE_PLATFORMS as readonly string[]).includes(values.platform)
+    ) {
+      return usageError(
+        `Invalid --platform "${values.platform}". Allowed: ${TEMPLATE_PLATFORMS.join(', ')}.`,
+      );
+    }
     if (positionals.length > 1) {
       return usageError(`Unexpected argument "${positionals[1]}" for template.`);
     }
@@ -354,6 +365,9 @@ async function main(): Promise<number> {
       kind: values.minimal ? 'minimal' : 'full',
       noColor: !useColor,
     };
+    if (values.platform !== undefined) {
+      templateOpts.platform = values.platform as (typeof TEMPLATE_PLATFORMS)[number];
+    }
     if (values.output !== undefined) templateOpts.outputPath = values.output;
     if (values.force) templateOpts.force = true;
     return runTemplate(templateOpts);

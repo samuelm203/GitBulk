@@ -56,6 +56,37 @@ describe('generateTemplate', () => {
   it('never embeds a token field', () => {
     assert.doesNotMatch(generateTemplate('full'), /GITBULK_\w*TOKEN\s*:/);
   });
+
+  it('every platform variant is a VALID GitBulk config (full + minimal)', () => {
+    for (const platform of ['bitbucket', 'github', 'gitlab', 'azure-devops'] as const) {
+      for (const kind of ['full', 'minimal'] as const) {
+        const parsed: unknown = parseYaml(generateTemplate(kind, platform));
+        const result = GitBulkConfigSchema.safeParse(parsed);
+        assert.equal(
+          result.success,
+          true,
+          `${kind}/${platform}: ${JSON.stringify(result.success ? {} : result.error.issues)}`,
+        );
+      }
+    }
+  });
+
+  it('emits the matching platform block and token env var', () => {
+    const gitlab = generateTemplate('full', 'gitlab');
+    assert.match(gitlab, /prPlatform: gitlab/);
+    assert.match(gitlab, /namespace: my-group/);
+    assert.match(gitlab, /GITBULK_GITLAB_TOKEN/);
+    assert.doesNotMatch(gitlab, /prPlatform: bitbucket/);
+
+    const azure = generateTemplate('minimal', 'azure-devops');
+    assert.match(azure, /prPlatform: azure-devops/);
+    assert.match(azure, /organization: my-org/);
+    assert.match(azure, /project: my-project/);
+  });
+
+  it('defaults to bitbucket when no platform is given', () => {
+    assert.match(generateTemplate('full'), /prPlatform: bitbucket/);
+  });
 });
 
 describe('runTemplate', () => {
