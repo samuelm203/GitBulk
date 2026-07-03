@@ -238,6 +238,55 @@ InModuleScope GitBulk {
             }
         }
 
+        Context 'gradle-add-dependency' {
+            BeforeAll {
+                $script:groovyBuild = "plugins {`n    id 'java'`n}`n`ndependencies {`n    implementation 'org.slf4j:slf4j-api:2.0.0'`n}`n"
+            }
+            It 'adds a Groovy-DSL dependency after the opening line with detected indent' {
+                $root = newRepoDir
+                writeText (Join-Path $root 'build.gradle') $groovyBuild
+                $res = applyOp -Type 'gradle-add-dependency' -Params @{ group = 'org.apache.commons'; name = 'commons-lang3'; version = '3.14.0' } -RepoDir $root
+                $res.Changed | Should -BeTrue
+                $txt = readText (Join-Path $root 'build.gradle')
+                $txt | Should -Match "(?m)^    implementation 'org\.apache\.commons:commons-lang3:3\.14\.0'$"
+                $txt | Should -Match 'slf4j-api:2\.0\.0'
+            }
+            It 'uses Kotlin-DSL syntax for .kts build files' {
+                $root = newRepoDir
+                writeText (Join-Path $root 'build.gradle.kts') "dependencies {`n    implementation(`"a:b:1`")`n}`n"
+                $res = applyOp -Type 'gradle-add-dependency' -Params @{ group = 'g'; name = 'n'; version = '2'; buildFilePath = 'build.gradle.kts' } -RepoDir $root
+                $res.Changed | Should -BeTrue
+                (readText (Join-Path $root 'build.gradle.kts')) | Should -Match 'implementation\("g:n:2"\)'
+            }
+            It 'is idempotent when group:name is already present (any version)' {
+                $root = newRepoDir
+                writeText (Join-Path $root 'build.gradle') $groovyBuild
+                $res = applyOp -Type 'gradle-add-dependency' -Params @{ group = 'org.slf4j'; name = 'slf4j-api'; version = '9.9.9' } -RepoDir $root
+                $res.Changed | Should -BeFalse
+                $res.Message | Should -Match 'already present'
+            }
+            It 'ignores an indented dependencies block (e.g. inside buildscript)' {
+                $root = newRepoDir
+                writeText (Join-Path $root 'build.gradle') "buildscript {`n    dependencies {`n        classpath 'c:g:1'`n    }`n}`n`ndependencies {`n    implementation 'a:b:1'`n}`n"
+                $res = applyOp -Type 'gradle-add-dependency' -Params @{ group = 'x'; name = 'y'; version = '1' } -RepoDir $root
+                $res.Changed | Should -BeTrue
+                $txt = readText (Join-Path $root 'build.gradle')
+                $txt.IndexOf("implementation 'x:y:1'") | Should -BeGreaterThan $txt.IndexOf("`ndependencies {")
+            }
+            It 'skips when the build file is missing' {
+                $root = newRepoDir
+                $res = applyOp -Type 'gradle-add-dependency' -Params @{ group = 'g'; name = 'n'; version = '1' } -RepoDir $root
+                $res.Changed | Should -BeFalse
+                $res.Message | Should -Match 'No build.gradle found'
+            }
+            It 'errors when there is no top-level dependencies block' {
+                $root = newRepoDir
+                writeText (Join-Path $root 'build.gradle') "plugins {`n    id 'java'`n}`n"
+                $res = applyOp -Type 'gradle-add-dependency' -Params @{ group = 'g'; name = 'n'; version = '1' } -RepoDir $root
+                $res.Error | Should -Match 'top-level dependencies block'
+            }
+        }
+
         Context 'yaml-patch' {
             It 'sets a value at a dot-path, creating intermediate maps' {
                 $root = newRepoDir
