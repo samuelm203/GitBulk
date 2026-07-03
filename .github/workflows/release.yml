@@ -13,7 +13,8 @@
 #   1. version in node_ts/package.json bumpen (z. B. auf 0.2.0) + CHANGELOG ergänzen
 #   2. committen, mergen
 #   3. `git tag v0.2.0 && git push origin v0.2.0`
-#   → dieser Workflow baut, testet und published.
+#   → dieser Workflow baut, testet, published — und legt danach ein
+#     GitHub-Release an (Notes = CHANGELOG-Abschnitt der Version).
 
 name: Release
 
@@ -23,7 +24,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write # Checkout + GitHub-Release anlegen (Notes aus dem CHANGELOG)
   id-token: write # für npm provenance
 
 jobs:
@@ -67,3 +68,31 @@ jobs:
         run: npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      # GitHub-Release mit den Notes aus dem CHANGELOG-Abschnitt der Version.
+      # Läuft NACH dem Publish: schlägt npm fehl, entsteht kein Release.
+      - name: Create GitHub release from CHANGELOG
+        if: startsWith(github.ref, 'refs/tags/')
+        working-directory: ${{ github.workspace }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="$GITHUB_REF_NAME"
+          VERSION="${TAG#v}"
+          # Abschnitt "## [X.Y.Z]" bis zur nächsten "## ["-Überschrift extrahieren.
+          awk -v ver="$VERSION" '
+            BEGIN { gsub(/\./, "\\.", ver) }
+            $0 ~ ("^## \\[" ver "\\]") { on=1; next }
+            on && /^## \[/ { exit }
+            on { print }
+          ' CHANGELOG.md > release-notes.md
+          if [ ! -s release-notes.md ]; then
+            echo "::warning::No CHANGELOG section for $VERSION — using a generic body."
+            echo "See [CHANGELOG.md](./CHANGELOG.md) for details." > release-notes.md
+          fi
+          # Idempotent: bei einem Re-Run des Workflows kein Duplikat-Fehler.
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            echo "Release $TAG already exists — skipping."
+          else
+            gh release create "$TAG" --title "$TAG" --notes-file release-notes.md --verify-tag
+          fi
