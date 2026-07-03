@@ -73,6 +73,12 @@ describe('CLI usage hygiene (subcommand vs bulk-flow options)', () => {
     assert.match(r.stderr, /mutually exclusive/);
   });
 
+  it('rejects an unknown --platform for `template`', () => {
+    const r = runCli(['template', '--platform', 'svn', '--no-color']);
+    assert.equal(r.status, 3);
+    assert.match(r.stderr, /Invalid --platform/);
+  });
+
   it('rejects --report/--retry-failed for subcommands like init', () => {
     const r = runCli(['init', '--report', 'out.json', '--no-color']);
     assert.equal(r.status, 3);
