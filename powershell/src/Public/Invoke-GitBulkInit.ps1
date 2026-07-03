@@ -91,11 +91,11 @@ function Invoke-GitBulkInit {
     }
 
     $createPrOnError = Read-GitBulkValidated -Prompt 'If a code change fails, open a PR anyway? (Y/N)' -Validator $yesNo
-    $platform = Read-GitBulkValidated -Prompt 'PR platform (bitbucket/github)' -Validator {
+    $platform = Read-GitBulkValidated -Prompt 'PR platform (bitbucket/github/gitlab/azure-devops)' -Validator {
         param($r)
         $t = ([string]$r).Trim().ToLowerInvariant()
-        if ($t -in @('bitbucket', 'github')) { return [pscustomobject]@{ Ok = $true; Value = $t; Error = $null } }
-        return [pscustomobject]@{ Ok = $false; Value = $null; Error = "Please enter 'bitbucket' or 'github'." }
+        if ($t -in @('bitbucket', 'github', 'gitlab', 'azure-devops')) { return [pscustomobject]@{ Ok = $true; Value = $t; Error = $null } }
+        return [pscustomobject]@{ Ok = $false; Value = $null; Error = "Please enter 'bitbucket', 'github', 'gitlab' or 'azure-devops'." }
     }
 
     $yamlArgs = @{
@@ -108,10 +108,20 @@ function Invoke-GitBulkInit {
         PrPlatform      = $platform
         Operations      = $collected.ToArray()
     }
-    if ($platform -eq 'bitbucket') {
-        $yamlArgs.BitbucketWorkspace = Read-GitBulkValidated -Prompt 'Bitbucket workspace (slug/project key)' -Validator $notEmpty
-    } else {
-        $yamlArgs.GitHubOwner = Read-GitBulkValidated -Prompt 'GitHub owner (org/user)' -Validator $notEmpty
+    switch ($platform) {
+        'bitbucket' {
+            $yamlArgs.BitbucketWorkspace = Read-GitBulkValidated -Prompt 'Bitbucket workspace (slug/project key)' -Validator $notEmpty
+        }
+        'github' {
+            $yamlArgs.GitHubOwner = Read-GitBulkValidated -Prompt 'GitHub owner (org/user)' -Validator $notEmpty
+        }
+        'gitlab' {
+            $yamlArgs.GitLabNamespace = Read-GitBulkValidated -Prompt 'GitLab namespace (group/user)' -Validator $notEmpty
+        }
+        'azure-devops' {
+            $yamlArgs.AzureOrganization = Read-GitBulkValidated -Prompt 'Azure DevOps organization' -Validator $notEmpty
+            $yamlArgs.AzureProject = Read-GitBulkValidated -Prompt 'Azure DevOps project' -Validator $notEmpty
+        }
     }
 
     $yaml = New-GitBulkConfigYaml @yamlArgs
