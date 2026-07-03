@@ -33,6 +33,9 @@ parity (the browser GUI and terminal TUI are Node-only).
 - **`template --platform <p>`** (Node CLI + PowerShell `-Template -Platform`): the
   config template can now be emitted for any of the four PR platforms (default:
   bitbucket) — with the matching sub-block, targetBranch default and token env var.
+- **Automatic GitHub releases**: pushing a `vX.Y.Z` tag now also creates a GitHub
+  release whose notes are the CHANGELOG section of that version (after the npm
+  publish succeeded; idempotent on workflow re-runs).
 
 ## [1.1.0] - 2026-07-02
 
