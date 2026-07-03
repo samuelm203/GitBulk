@@ -11,8 +11,8 @@ BeforeAll {
 Describe 'Get-GitBulkOperationInfo' {
     BeforeAll { $script:infos = Get-GitBulkOperationInfo }
 
-    It 'returns all eight operations, sorted by type' {
-        $script:infos.Count | Should -Be 8
+    It 'returns all nine operations, sorted by type' {
+        $script:infos.Count | Should -Be 9
         $types = $script:infos.Type
         ($types -join ',') | Should -Be (($types | Sort-Object) -join ',')
         $types | Should -Contain 'maven-add-dependency'
@@ -59,7 +59,7 @@ Describe 'Get-GitBulkOperationInfo' {
 Describe 'Show-GitBulkOperationList' {
     It 'prints a human-readable list with parameter details' {
         $out = Show-GitBulkOperationList -NoColor 6>&1 | Out-String
-        $out | Should -Match 'Available operations \(8\)'
+        $out | Should -Match 'Available operations \(9\)'
         $out | Should -Match 'add-file'
         $out | Should -Match 'regex-replace'
         $out | Should -Match 'default="g"'
@@ -72,7 +72,7 @@ Describe 'Show-GitBulkOperationList' {
         [Console]::SetOut($sw)
         try { Show-GitBulkOperationList -Json } finally { [Console]::SetOut($orig) }
         $parsed = $sw.ToString() | ConvertFrom-Json
-        $parsed.Count | Should -Be 8
+        $parsed.Count | Should -Be 9
         ($parsed | Where-Object Type -EQ 'json-patch').Params.Name | Should -Contain 'pointer'
     }
 }

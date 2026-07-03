@@ -49,7 +49,7 @@ deliberately **tiny dependency footprint** (see below).
   `.ps1`, `.js`/`.mjs`, and `.ts`/TypeScript). The right interpreter is chosen automatically
   per platform.
 - **Declarative operations** as an alternative to scripts: a chain of reusable changes
-  (add/replace/delete a file, regex replace, add a Maven/npm dependency, patch JSON) configured
+  (add/replace/delete a file, regex replace, add a Maven/npm dependency, patch JSON/YAML) configured
   directly in the config — they run in order, treat a missing target file as a no-op, and report
   whether anything changed. No scripting required.
 - **Interactive generator** (`gitbulk init`) that walks you through the available operations and
@@ -338,6 +338,7 @@ nothing changed, no PR is opened and the feature branch is deleted.
 | `npm-add-dependency`   | Add a dependency to `package.json` (no-op if already present). | `name`, `version`, `field` (`dependencies`\|`devDependencies`\|`peerDependencies`, default `dependencies`), `packagePath` (default `package.json`) |
 | `npm-update`           | Update the version of an existing dependency in `package.json` (searches all dependency fields). | `name`, `version`, `packagePath` (default `package.json`) |
 | `json-patch`           | Set a value at a dot-path in a JSON file (creates intermediate objects). The value is parsed as JSON when possible (`true`, `42`, `"x"`), else used as a raw string. | `path`, `pointer` (e.g. `scripts.build`), `value` |
+| `yaml-patch`           | Set a value at a dot-path in a YAML file — **comments and formatting of untouched parts are preserved** (document-mode edit). Value coercion like `json-patch`. No standalone-script generator (YAML needs the `yaml` dependency). | `path`, `pointer` (e.g. `image.tag`), `value` |
 
 Paths are always relative to the repository and **may not escape it** (no absolute paths, no
 `..`). The list of operations and their parameters is also available via `gitbulk list-operations`

@@ -36,6 +36,11 @@ parity (the browser GUI and terminal TUI are Node-only).
 - **Automatic GitHub releases**: pushing a `vX.Y.Z` tag now also creates a GitHub
   release whose notes are the CHANGELOG section of that version (after the npm
   publish succeeded; idempotent on workflow re-runs).
+- **New operation `yaml-patch`** (Node CLI + PowerShell port): set a value at a
+  dot-path in a YAML file, with the same JSON-style value coercion as `json-patch`.
+  The Node version edits the document in place and **preserves comments and
+  formatting**; the PowerShell port re-serializes via `powershell-yaml` (comments
+  are not preserved). Nine operations total.
 
 ## [1.1.0] - 2026-07-02
 
