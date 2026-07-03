@@ -40,7 +40,12 @@ parity (the browser GUI and terminal TUI are Node-only).
   dot-path in a YAML file, with the same JSON-style value coercion as `json-patch`.
   The Node version edits the document in place and **preserves comments and
   formatting**; the PowerShell port re-serializes via `powershell-yaml` (comments
-  are not preserved). Nine operations total.
+  are not preserved).
+- **New operation `gradle-add-dependency`** (Node CLI + PowerShell port): add a
+  dependency to the top-level `dependencies { }` block of a Gradle build file —
+  Groovy or Kotlin DSL (chosen by the `buildFilePath` ending), configurable
+  `configuration` (default `implementation`), idempotent on `group:name`.
+  Ten operations total.
 
 ## [1.1.0] - 2026-07-02
 

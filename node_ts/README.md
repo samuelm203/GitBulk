@@ -49,7 +49,7 @@ deliberately **tiny dependency footprint** (see below).
   `.ps1`, `.js`/`.mjs`, and `.ts`/TypeScript). The right interpreter is chosen automatically
   per platform.
 - **Declarative operations** as an alternative to scripts: a chain of reusable changes
-  (add/replace/delete a file, regex replace, add a Maven/npm dependency, patch JSON/YAML) configured
+  (add/replace/delete a file, regex replace, add a Maven/Gradle/npm dependency, patch JSON/YAML) configured
   directly in the config — they run in order, treat a missing target file as a no-op, and report
   whether anything changed. No scripting required.
 - **Interactive generator** (`gitbulk init`) that walks you through the available operations and
@@ -335,6 +335,7 @@ nothing changed, no PR is opened and the feature branch is deleted.
 | `delete-file`          | Delete a file (no-op if already gone).               | `path`                                                                         |
 | `regex-replace`        | Search & replace via a regular expression.           | `path`, `pattern`, `replacement`, `flags` (default `g`), `requireMatch`        |
 | `maven-add-dependency` | Add a dependency to the first project-level `<dependencies>` block (skips `<dependencyManagement>`); no-op if group+artifact already present. | `groupId`, `artifactId`, `version`, `scope`, `pomPath` (default `pom.xml`) |
+| `gradle-add-dependency` | Add a dependency to the **top-level** `dependencies { }` block (indented blocks like `buildscript` are ignored). Groovy or Kotlin DSL, chosen by the `buildFilePath` ending (`.kts` → Kotlin); no-op if `group:name` is already present. | `group`, `name`, `version`, `configuration` (default `implementation`), `buildFilePath` (default `build.gradle`) |
 | `npm-add-dependency`   | Add a dependency to `package.json` (no-op if already present). | `name`, `version`, `field` (`dependencies`\|`devDependencies`\|`peerDependencies`, default `dependencies`), `packagePath` (default `package.json`) |
 | `npm-update`           | Update the version of an existing dependency in `package.json` (searches all dependency fields). | `name`, `version`, `packagePath` (default `package.json`) |
 | `json-patch`           | Set a value at a dot-path in a JSON file (creates intermediate objects). The value is parsed as JSON when possible (`true`, `42`, `"x"`), else used as a raw string. | `path`, `pointer` (e.g. `scripts.build`), `value` |
