@@ -27,6 +27,9 @@ parity (the browser GUI and terminal TUI are Node-only).
   for the PR platform (Bitbucket, GitHub, GitLab or Azure DevOps) and its addressing
   fields, and emits the matching config sub-block — previously it always generated a
   Bitbucket config.
+- **`-Init` platform choice** (PowerShell port): same for `./gitbulk.ps1 -Init` —
+  GitLab and Azure DevOps can now be selected (previously bitbucket/github only),
+  and the generated header names the platform's token env var.
 
 ## [1.1.0] - 2026-07-02
 

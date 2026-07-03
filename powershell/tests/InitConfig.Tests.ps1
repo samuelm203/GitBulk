@@ -57,6 +57,35 @@ Describe 'New-GitBulkConfigYaml' {
         $cfg.operations[0]['type'] | Should -Be 'delete-file'
     }
 
+    It 'produces a gitlab config that round-trips (targetBranch main, correct token var)' {
+        $yaml = New-GitBulkConfigYaml -Rus @('r') -Ticket 'AKB-4' -Branch 'feat/z' -CommitMessage 'm' `
+            -PrSummary 's' -Operations @([ordered]@{ type = 'delete-file'; path = 'x' }) `
+            -PrPlatform 'gitlab' -GitLabNamespace 'my-group'
+        $yaml | Should -Match 'GITBULK_GITLAB_TOKEN'
+        $file = Join-Path $script:tmp 'gl.yaml'
+        [System.IO.File]::WriteAllText($file, $yaml)
+
+        $cfg = Get-GitBulkConfig -Path $file
+        $cfg.prPlatform | Should -Be 'gitlab'
+        $cfg.gitlab.namespace | Should -Be 'my-group'
+        $cfg.gitlab.targetBranch | Should -Be 'main'
+    }
+
+    It 'produces an azure-devops config that round-trips (targetBranch master, correct token var)' {
+        $yaml = New-GitBulkConfigYaml -Rus @('r') -Ticket 'AKB-5' -Branch 'feat/a' -CommitMessage 'm' `
+            -PrSummary 's' -Operations @([ordered]@{ type = 'delete-file'; path = 'x' }) `
+            -PrPlatform 'azure-devops' -AzureOrganization 'my-org' -AzureProject 'my-proj'
+        $yaml | Should -Match 'GITBULK_AZURE_DEVOPS_TOKEN'
+        $file = Join-Path $script:tmp 'az.yaml'
+        [System.IO.File]::WriteAllText($file, $yaml)
+
+        $cfg = Get-GitBulkConfig -Path $file
+        $cfg.prPlatform | Should -Be 'azure-devops'
+        $cfg.azureDevOps.organization | Should -Be 'my-org'
+        $cfg.azureDevOps.project | Should -Be 'my-proj'
+        $cfg.azureDevOps.targetBranch | Should -Be 'master'
+    }
+
     It 'reflects createPrOnError and defaults sourceBranch to master' {
         $yaml = New-GitBulkConfigYaml -Rus @('r') -Ticket 'AKB-3' -Branch 'b' -CommitMessage 'm' `
             -PrSummary 's' -Operations @([ordered]@{ type = 'delete-file'; path = 'x' }) -CreatePrOnError $true
