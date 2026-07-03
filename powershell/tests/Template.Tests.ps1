@@ -56,6 +56,29 @@ Describe 'New-GitBulkTemplate' {
         $text | Should -Match '(?m)^concurrency:'
         $text | Should -Match '(?m)^sourceBranch:'
     }
+
+    It 'every platform variant round-trips through Get-GitBulkConfig' {
+        foreach ($p in @('bitbucket', 'github', 'gitlab', 'azure-devops')) {
+            foreach ($k in @('full', 'minimal')) {
+                $file = Join-Path $script:tmp "tpl-$k-$p.yaml"
+                [System.IO.File]::WriteAllText($file, (New-GitBulkTemplate -Kind $k -Platform $p))
+                (Get-GitBulkConfig -Path $file).prPlatform | Should -Be $p
+            }
+        }
+    }
+
+    It 'emits the matching platform block and token env var' {
+        $gl = New-GitBulkTemplate -Kind full -Platform gitlab
+        $gl | Should -Match 'prPlatform: gitlab'
+        $gl | Should -Match 'namespace: my-group'
+        $gl | Should -Match 'GITBULK_GITLAB_TOKEN'
+        $gl | Should -Not -Match 'prPlatform: bitbucket'
+
+        $az = New-GitBulkTemplate -Kind minimal -Platform azure-devops
+        $az | Should -Match 'prPlatform: azure-devops'
+        $az | Should -Match 'organization: my-org'
+        $az | Should -Match 'project: my-project'
+    }
 }
 
 Describe 'Invoke-GitBulkTemplate' {

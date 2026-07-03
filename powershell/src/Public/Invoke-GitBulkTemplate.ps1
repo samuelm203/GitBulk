@@ -13,6 +13,9 @@ function Invoke-GitBulkTemplate {
     .PARAMETER Kind
         'full' (Default) oder 'minimal'.
 
+    .PARAMETER Platform
+        PR-Plattform des emittierten Blocks (Default: bitbucket).
+
     .PARAMETER OutputPath
         Zieldatei. Pflicht in dieser Funktion.
 
@@ -31,6 +34,9 @@ function Invoke-GitBulkTemplate {
         [ValidateSet('full', 'minimal')]
         [string]$Kind = 'full',
 
+        [ValidateSet('bitbucket', 'github', 'gitlab', 'azure-devops')]
+        [string]$Platform = 'bitbucket',
+
         [Parameter(Mandatory)]
         [string]$OutputPath,
 
@@ -38,7 +44,7 @@ function Invoke-GitBulkTemplate {
         [switch]$NoColor
     )
 
-    $text = New-GitBulkTemplate -Kind $Kind
+    $text = New-GitBulkTemplate -Kind $Kind -Platform $Platform
 
     $target = if ([System.IO.Path]::IsPathRooted($OutputPath)) {
         $OutputPath

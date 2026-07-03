@@ -67,6 +67,7 @@ param(
     [string]$Auth,
 
     [Parameter(ParameterSetName = 'Auth')]
+    [Parameter(ParameterSetName = 'Template')]
     [ValidateSet('bitbucket', 'github', 'gitlab', 'azure-devops')]
     [string]$Platform,
 
@@ -89,13 +90,15 @@ if ($ListOperations) {
 }
 
 if ($Template) {
-    $kind = if ($Minimal) { 'minimal' } else { 'full' }
+    $tplArgs = @{ Kind = if ($Minimal) { 'minimal' } else { 'full' } }
+    # -Platform nur durchreichen, wenn gesetzt — sonst lehnt das ValidateSet '' ab.
+    if (-not [string]::IsNullOrEmpty($Platform)) { $tplArgs.Platform = $Platform }
     if ([string]::IsNullOrEmpty($Output)) {
         # stdout-Modus: YAML auf den Success-Stream, damit `> datei.yaml` greift.
-        New-GitBulkTemplate -Kind $kind
+        New-GitBulkTemplate @tplArgs
         exit 0
     }
-    $code = Invoke-GitBulkTemplate -Kind $kind -OutputPath $Output -Force:$Force -NoColor:$NoColor
+    $code = Invoke-GitBulkTemplate @tplArgs -OutputPath $Output -Force:$Force -NoColor:$NoColor
     exit $code
 }
 
