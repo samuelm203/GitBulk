@@ -1,0 +1,16 @@
+# Dependabot: hält npm-Dependencies (node_ts/) und die GitHub-Actions aktuell.
+# Wöchentlich, um PR-Rauschen gering zu halten; Minor/Patch werden gruppiert.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /node_ts
+    schedule:
+      interval: weekly
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
