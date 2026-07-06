@@ -14,7 +14,7 @@
 
     # Wird von GitBulk.psm1 per Export-ModuleMember gesetzt; hier explizit für
     # Discovery/Tooling. Bei neuen öffentlichen Funktionen ergänzen.
-    FunctionsToExport = @('Get-GitBulkVersion', 'Get-GitBulkConfig', 'Invoke-GitBulkRun', 'Invoke-GitBulk', 'Get-GitBulkOperationInfo', 'Show-GitBulkOperationList', 'New-GitBulkConfigYaml', 'Invoke-GitBulkInit', 'New-GitBulkTemplate', 'Invoke-GitBulkTemplate', 'Invoke-GitBulkAuth', 'Get-GitBulkStatusReport', 'Format-GitBulkStatusJson', 'Format-GitBulkStatusTable')
+    FunctionsToExport = @('Get-GitBulkVersion', 'Get-GitBulkConfig', 'Invoke-GitBulkRun', 'Invoke-GitBulk', 'Get-GitBulkOperationInfo', 'Show-GitBulkOperationList', 'New-GitBulkConfigYaml', 'Invoke-GitBulkInit', 'New-GitBulkTemplate', 'Invoke-GitBulkTemplate', 'Invoke-GitBulkAuth', 'Get-GitBulkStatusReport', 'Format-GitBulkStatusJson', 'Format-GitBulkStatusTable', 'Invoke-GitBulkClose')
     CmdletsToExport   = @()
     VariablesToExport = @()
     AliasesToExport   = @()
