@@ -13,6 +13,8 @@
 import type { GitHubConfig } from '../config/schema.js';
 import type {
   CiState,
+  ClosePrInput,
+  ClosePrResult,
   CreatePrInput,
   CreatePrResult,
   PrApprovals,
@@ -252,6 +254,27 @@ export class GitHubPrAdapter implements PullRequestAdapter {
       return anySuccess ? 'passed' : 'none';
     } catch {
       return undefined;
+    }
+  }
+
+  /**
+   * Schließt einen offenen PR (`gitbulk close`).
+   *
+   * PATCH {apiBase}/repos/{owner}/{ru}/pulls/{number} — Body: { state: "closed" }
+   */
+  public async closePullRequest(input: ClosePrInput): Promise<ClosePrResult> {
+    const owner = input.workspace ?? this.config.owner;
+    const url = `${this.apiBase}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(input.ru)}/pulls/${String(input.id)}`;
+    try {
+      const res = await fetch(url, {
+        method: 'PATCH',
+        headers: this.headers(),
+        body: JSON.stringify({ state: 'closed' }),
+      });
+      if (res.status === 200) return { ok: true, statusCode: res.status };
+      return { ok: false, statusCode: res.status, error: `HTTP ${res.status}` };
+    } catch (err) {
+      return { ok: false, statusCode: 0, error: `network error: ${(err as Error).message}` };
     }
   }
 

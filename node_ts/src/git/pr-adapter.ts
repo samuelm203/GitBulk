@@ -144,6 +144,17 @@ export interface PrStatusInfo {
   error?: string;
 }
 
+/** Eingabe für das Schließen eines konkreten PR (`gitbulk close`). */
+export interface ClosePrInput extends PrLookupInput {
+  /** Plattform-spezifische PR-ID/-Nummer (aus dem Status-Lookup). */
+  id: string | number;
+}
+
+/** Ergebnis eines Close-Aufrufs. Result-Style: wirft NIE. */
+export type ClosePrResult =
+  | { ok: true; statusCode: number }
+  | { ok: false; statusCode: number; error: string };
+
 /**
  * Plattform-Adapter-Interface. Jede unterstützte Plattform (Bitbucket,
  * Azure DevOps, …) implementiert dieses Interface.
@@ -171,6 +182,15 @@ export interface PullRequestAdapter {
    * @returns Status-Info (wirft NIE)
    */
   getPullRequestStatus?(input: PrLookupInput): Promise<PrStatusInfo>;
+
+  /**
+   * Schließt/declined einen offenen PR (`gitbulk close`). **Optional** —
+   * der Aufrufer prüft via `adapterSupportsClose`.
+   *
+   * @param input - Repo + Source-Branch + PR-ID
+   * @returns Erfolgs- oder Fehler-Result (wirft NIE)
+   */
+  closePullRequest?(input: ClosePrInput): Promise<ClosePrResult>;
 }
 
 /**

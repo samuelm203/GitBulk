@@ -17,6 +17,8 @@
 import type { GitLabConfig } from '../config/schema.js';
 import type {
   CiState,
+  ClosePrInput,
+  ClosePrResult,
   CreatePrInput,
   CreatePrResult,
   PrApprovals,
@@ -206,6 +208,27 @@ export class GitLabPrAdapter implements PullRequestAdapter {
       if (ci !== undefined) info.ci = ci;
     }
     return info;
+  }
+
+  /**
+   * Schließt einen offenen MR (`gitbulk close`).
+   *
+   * PUT {apiBase}/projects/{ns%2Frepo}/merge_requests/{iid} — Body: { state_event: "close" }
+   */
+  public async closePullRequest(input: ClosePrInput): Promise<ClosePrResult> {
+    const project = this.projectPath(input.ru, input.workspace);
+    const url = `${this.apiBase}/projects/${project}/merge_requests/${String(input.id)}`;
+    try {
+      const res = await fetch(url, {
+        method: 'PUT',
+        headers: this.headers(),
+        body: JSON.stringify({ state_event: 'close' }),
+      });
+      if (res.status === 200) return { ok: true, statusCode: res.status };
+      return { ok: false, statusCode: res.status, error: `HTTP ${res.status}` };
+    } catch (err) {
+      return { ok: false, statusCode: 0, error: `network error: ${(err as Error).message}` };
+    }
   }
 
   /** Approvals (best-effort): GET /merge_requests/{iid}/approvals. */
