@@ -31,8 +31,21 @@ export interface StatusOptions {
   only?: string;
   /** JSON statt Tabelle ausgeben. */
   json?: boolean;
+  /** Poll-Loop: Tabelle regelmäßig aktualisieren, bis kein PR mehr offen ist. */
+  watch?: boolean;
+  /** Poll-Intervall in Sekunden (Default: 30). */
+  intervalSeconds?: number;
   /** Farben deaktivieren. */
   noColor?: boolean;
+}
+
+/**
+ * Ist der Watch-Loop fertig? Fertig = kein PR mehr `open` und kein API-Fehler
+ * (Fehler würden sonst endlos weiterpollen, obwohl sich nichts ändern kann).
+ * `none` gilt als terminal — ohne neuen Push entsteht daraus kein PR.
+ */
+export function watchSettled(report: PrStatusReport): boolean {
+  return report.totals.open === 0 && report.totals.errored === 0;
 }
 
 /** Liefert die Farbfunktion für ein State-Label. */
@@ -194,6 +207,14 @@ export async function runStatus(opts: StatusOptions): Promise<number> {
     return 3;
   }
 
+  // ── Watch-Modus: pollen, bis kein PR mehr offen ist ────────────
+  if (opts.watch === true) {
+    return watchLoop(config, adapter, {
+      intervalSeconds: opts.intervalSeconds ?? 30,
+      noColor: !useColor,
+    });
+  }
+
   // ── Status sammeln + ausgeben ──────────────────────────────────
   const report = await collectPrStatus(config, adapter);
   if (opts.json === true) {
@@ -202,4 +223,64 @@ export async function runStatus(opts: StatusOptions): Promise<number> {
     process.stdout.write(formatStatusReport(report, { noColor: !useColor }));
   }
   return 0;
+}
+
+/** Abbruchbarer Sleep (löst früher auf, wenn `stop()` gerufen wird). */
+function interruptibleSleep(ms: number): { done: Promise<void>; stop: () => void } {
+  let stop: () => void = () => undefined;
+  const done = new Promise<void>((resolve) => {
+    const timer = setTimeout(resolve, ms);
+    stop = (): void => {
+      clearTimeout(timer);
+      resolve();
+    };
+  });
+  return { done, stop };
+}
+
+/**
+ * Poll-Loop für `--watch`: rendert die Status-Tabelle alle `intervalSeconds`
+ * neu (im TTY mit Bildschirm-Clear), bis kein PR mehr offen ist. Ctrl+C
+ * beendet sauber mit Exit 130.
+ */
+async function watchLoop(
+  config: Parameters<typeof collectPrStatus>[0],
+  adapter: Parameters<typeof collectPrStatus>[1],
+  opts: { intervalSeconds: number; noColor: boolean },
+): Promise<number> {
+  const isTty = process.stdout.isTTY === true;
+  let aborted = false;
+  let wakeUp: () => void = () => undefined;
+  const onSigint = (): void => {
+    aborted = true;
+    wakeUp();
+  };
+  process.on('SIGINT', onSigint);
+
+  try {
+    for (;;) {
+      const report = await collectPrStatus(config, adapter);
+
+      // Im TTY die Anzeige ersetzen (Clear + Home), sonst sequentiell anhängen.
+      if (isTty) process.stdout.write('\x1b[2J\x1b[H');
+      const stamp = new Date().toLocaleTimeString();
+      process.stdout.write(
+        `${formatStatusReport(report, { noColor: opts.noColor })}` +
+          `\n[watch] ${stamp} — refreshing every ${opts.intervalSeconds}s (Ctrl+C to stop)\n`,
+      );
+
+      if (watchSettled(report)) {
+        process.stdout.write('\nAll pull requests are settled — done.\n');
+        return 0;
+      }
+      if (aborted) return 130;
+
+      const sleep = interruptibleSleep(opts.intervalSeconds * 1000);
+      wakeUp = sleep.stop;
+      await sleep.done;
+      if (aborted) return 130;
+    }
+  } finally {
+    process.removeListener('SIGINT', onSigint);
+  }
 }

@@ -41,6 +41,9 @@ parity (the browser GUI and terminal TUI are Node-only).
   The Node version edits the document in place and **preserves comments and
   formatting**; the PowerShell port re-serializes via `powershell-yaml` (comments
   are not preserved).
+- **`gitbulk status --watch`** (Node CLI): poll and re-render the status table
+  (interval via `--interval <s>`, default 30) until no PR is open anymore —
+  handy while waiting for reviews. Ctrl+C stops with exit 130.
 - **`gitbulk close`** (Node CLI): the cleanup counterpart to a run — closes/declines
   every open PR of a config's RUs (all four platforms) and deletes the remote
   feature branches (`git push origin --delete` from each local repo). Destructive:
