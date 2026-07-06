@@ -12,6 +12,8 @@ parity (the browser GUI and terminal TUI are Node-only).
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-07-06
+
 ### Added
 
 - **`--report <path>`** (Node CLI): write a machine-readable JSON run report for CI
@@ -145,7 +147,8 @@ Initial public release.
 - Tokens are never read from a project config and never logged.
 - The `--gui` server binds to `127.0.0.1` only and never sends tokens to the browser.
 
-[Unreleased]: https://github.com/samuelm203/GitBulk/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/samuelm203/GitBulk/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/samuelm203/GitBulk/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/samuelm203/GitBulk/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/samuelm203/GitBulk/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/samuelm203/GitBulk/releases/tag/v1.0.0
