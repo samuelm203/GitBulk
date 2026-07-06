@@ -26,6 +26,8 @@ import { Buffer } from 'node:buffer';
 import type { BitbucketConfig } from '../config/schema.js';
 import type {
   CiState,
+  ClosePrInput,
+  ClosePrResult,
   CreatePrInput,
   CreatePrResult,
   PrApprovals,
@@ -338,6 +340,52 @@ export class BitbucketPrAdapter implements PullRequestAdapter {
       return rollupBitbucketBuild(states);
     } catch {
       return undefined;
+    }
+  }
+
+  /**
+   * Declined einen offenen PR (`gitbulk close`).
+   *
+   * Cloud:  POST /repositories/{ws}/{repo}/pullrequests/{id}/decline
+   * Server: POST /rest/api/1.0/projects/{key}/repos/{repo}/pull-requests/{id}/decline?version=<v>
+   *         (Server verlangt die aktuelle PR-`version` — vorab per GET geholt.)
+   */
+  public async closePullRequest(input: ClosePrInput): Promise<ClosePrResult> {
+    const ws = input.workspace ?? this.config.workspace;
+    const headers = {
+      Authorization: this.authHeader,
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    };
+
+    let url: string;
+    if (this.cloud) {
+      url = `${this.apiBase}/repositories/${encodeURIComponent(ws)}/${encodeURIComponent(input.ru)}/pullrequests/${encodeURIComponent(String(input.id))}/decline`;
+    } else {
+      const prUrl = `${this.apiBase}/rest/api/1.0/projects/${encodeURIComponent(ws)}/repos/${encodeURIComponent(input.ru)}/pull-requests/${encodeURIComponent(String(input.id))}`;
+      let version: number;
+      try {
+        const res = await fetch(prUrl, { method: 'GET', headers });
+        if (res.status !== 200) {
+          return { ok: false, statusCode: res.status, error: `HTTP ${res.status} (version lookup)` };
+        }
+        const data = JSON.parse(await res.text()) as { version?: number };
+        if (typeof data.version !== 'number') {
+          return { ok: false, statusCode: 200, error: 'PR version missing in server response' };
+        }
+        version = data.version;
+      } catch (err) {
+        return { ok: false, statusCode: 0, error: `network error: ${(err as Error).message}` };
+      }
+      url = `${prUrl}/decline?version=${version}`;
+    }
+
+    try {
+      const res = await fetch(url, { method: 'POST', headers });
+      if (res.status === 200 || res.status === 204) return { ok: true, statusCode: res.status };
+      return { ok: false, statusCode: res.status, error: `HTTP ${res.status}` };
+    } catch (err) {
+      return { ok: false, statusCode: 0, error: `network error: ${(err as Error).message}` };
     }
   }
 

@@ -23,6 +23,8 @@ import { Buffer } from 'node:buffer';
 import type { AzureDevOpsConfig } from '../config/schema.js';
 import type {
   CiState,
+  ClosePrInput,
+  ClosePrResult,
   CreatePrInput,
   CreatePrResult,
   PrApprovals,
@@ -254,6 +256,27 @@ export class AzureDevOpsPrAdapter implements PullRequestAdapter {
       if (ci !== undefined) info.ci = ci;
     }
     return info;
+  }
+
+  /**
+   * Schließt einen offenen PR (`gitbulk close` → Azure: „abandoned").
+   *
+   * PATCH {…}/pullrequests/{id}?api-version=7.1 — Body: { status: "abandoned" }
+   */
+  public async closePullRequest(input: ClosePrInput): Promise<ClosePrResult> {
+    const project = this.projectFor(input.workspace);
+    const url = `${this.pullRequestsUrl(project, input.ru)}/${String(input.id)}?api-version=${API_VERSION}`;
+    try {
+      const res = await fetch(url, {
+        method: 'PATCH',
+        headers: this.headers(),
+        body: JSON.stringify({ status: 'abandoned' }),
+      });
+      if (res.status === 200) return { ok: true, statusCode: res.status };
+      return { ok: false, statusCode: res.status, error: `HTTP ${res.status}` };
+    } catch (err) {
+      return { ok: false, statusCode: 0, error: `network error: ${(err as Error).message}` };
+    }
   }
 
   /** CI-Rollup (best-effort): PR-Statuses aggregieren (fail > running > passed). */
