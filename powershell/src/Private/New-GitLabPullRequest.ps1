@@ -84,3 +84,26 @@ function Get-GitLabOpenMr {
     if ($null -eq $mr -or $null -eq $mr.iid) { return $null }
     return @{ Id = $mr.iid; Url = if ($mr.web_url) { [string]$mr.web_url } else { '' } }
 }
+
+# Schließt einen offenen MR (gitbulk -Close). PUT /merge_requests/{iid} state_event=close.
+# Result-Style: @{ Ok; StatusCode; Error }.
+function Close-GitLabPullRequest {
+    param(
+        [Parameter(Mandatory)] $GitLabConfig,
+        [Parameter(Mandatory)][string]$Token,
+        [Parameter(Mandatory)][string]$Ru,
+        [Parameter(Mandatory)] $Id,
+        [string]$Workspace = ''
+    )
+    $apiBase = if ($GitLabConfig.Contains('apiBaseUrl') -and $GitLabConfig.apiBaseUrl) {
+        ([string]$GitLabConfig.apiBaseUrl).TrimEnd('/')
+    } else { 'https://gitlab.com/api/v4' }
+    $ns = if (-not [string]::IsNullOrEmpty($Workspace)) { $Workspace } else { [string]$GitLabConfig.namespace }
+    $project = [uri]::EscapeDataString("$ns/$Ru")
+    $headers = @{ 'PRIVATE-TOKEN' = $Token; Accept = 'application/json' }
+    $url = "$apiBase/projects/$project/merge_requests/$Id"
+    $http = Invoke-GitBulkHttp -Uri $url -Method Put -Headers $headers -Body @{ state_event = 'close' }
+    if ($http.Error) { return @{ Ok = $false; StatusCode = 0; Error = "network error: $($http.Error)" } }
+    if ($http.StatusCode -eq 200) { return @{ Ok = $true; StatusCode = 200; Error = $null } }
+    return @{ Ok = $false; StatusCode = $http.StatusCode; Error = "HTTP $($http.StatusCode)" }
+}
