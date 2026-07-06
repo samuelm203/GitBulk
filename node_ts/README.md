@@ -264,6 +264,10 @@ bitbucket:
 | `gitlab`           | cond.    | —           | `{ namespace, targetBranch: main, reviewers: [], apiBaseUrl? }` (reviewers = numeric user IDs; project = `namespace/repo`). Required when `prPlatform: gitlab`. Token from `GITBULK_GITLAB_TOKEN`. |
 | `azureDevOps`      | cond.    | —           | `{ organization, project, targetBranch: master, reviewers: [], apiBaseUrl? }` (reviewers = user GUIDs; repo = `organization/project/<ru>`, per-RU `workspace` overrides the project). API base is `<apiBaseUrl>/<organization>`; on-prem set `apiBaseUrl` to the instance root **without** the collection and put the collection in `organization`. Required when `prPlatform: azure-devops`. Token (PAT) from `GITBULK_AZURE_DEVOPS_TOKEN`. |
 
+Want a safe playground? `node examples/demo/setup-demo.mjs` builds an isolated,
+repeatable demo workspace (three local repos + a dry-run config — nothing leaves
+your machine, a dummy token suffices).
+
 See [`examples/`](./examples) for ready-to-copy configs (YAML, JSON, JS, TS), a
 declarative-operations config (`gitbulk.operations.yaml`), and example code-change scripts
 (`change.mjs`, `change.ts`).

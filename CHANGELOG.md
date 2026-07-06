@@ -41,6 +41,13 @@ parity (the browser GUI and terminal TUI are Node-only).
   The Node version edits the document in place and **preserves comments and
   formatting**; the PowerShell port re-serializes via `powershell-yaml` (comments
   are not preserved).
+- **Demo setup script** (`node_ts/examples/demo/setup-demo.mjs`): builds a fully
+  isolated, repeatable demo workspace (three local repos with bare remotes plus a
+  ready-to-run dry-run config) — nothing leaves the machine, a dummy token suffices.
+- **CI coverage job**: the test suite now also runs once with V8 coverage
+  (Ubuntu, Node 22) and writes the coverage table to the job summary.
+- **Dependabot**: weekly update PRs for npm (`node_ts/`, minor/patch grouped)
+  and GitHub Actions.
 - **`gitbulk status --watch`** (Node CLI): poll and re-render the status table
   (interval via `--interval <s>`, default 30) until no PR is open anymore —
   handy while waiting for reviews. Ctrl+C stops with exit 130.
