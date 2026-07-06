@@ -81,7 +81,11 @@ function expandTilde(p: string): string {
   return p;
 }
 
-function resolveRepoPath(workspaceDir: string | undefined, ru: string, workspace?: string): string {
+export function resolveRepoPath(
+  workspaceDir: string | undefined,
+  ru: string,
+  workspace?: string,
+): string {
   const expandedRu = expandTilde(ru);
   if (isAbsolute(expandedRu)) return expandedRu;
   const base = workspaceDir === undefined ? process.cwd() : expandTilde(workspaceDir);
