@@ -9,6 +9,9 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 
 const tsxUrl = import.meta.resolve('tsx');
 
@@ -71,6 +74,52 @@ describe('CLI usage hygiene (subcommand vs bulk-flow options)', () => {
     const r = runCli(['--retry-failed', 'r.json', '--only', 'a', '--no-color']);
     assert.equal(r.status, 3);
     assert.match(r.stderr, /mutually exclusive/);
+  });
+
+  it('prints help for `close` (exit 0)', () => {
+    const r = runCli(['close', '--help']);
+    assert.equal(r.status, 0);
+    assert.match(r.stdout, /gitbulk close/);
+  });
+
+  it('rejects bulk-only view options for `close` with exit 3', () => {
+    const r = runCli(['close', '--report', 'x.json', '--no-color']);
+    assert.equal(r.status, 3);
+    assert.match(r.stderr, /--report/);
+    assert.match(r.stderr, /not valid for `close`/);
+  });
+
+  it('rejects --yes in the bulk flow (subcommand-only)', () => {
+    const r = runCli(['--yes', '--no-color']);
+    assert.equal(r.status, 3);
+    assert.match(r.stderr, /--yes/);
+  });
+
+  it('close requires --yes in non-interactive mode (no confirmation possible)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'gitbulk-close-usage-'));
+    try {
+      const cfg = join(dir, 'gitbulk.json');
+      writeFileSync(
+        cfg,
+        JSON.stringify({
+          rus: ['repo-a'],
+          ticket: 'AKB-1',
+          branch: 'feature/x',
+          operations: [{ type: 'delete-file', path: 'x.txt' }],
+          commitMessage: 'm',
+          prSummary: 's',
+          createPrOnError: false,
+          prPlatform: 'github',
+          github: { owner: 'me' },
+          workspaceDir: dir,
+        }),
+      );
+      const r = runCli(['close', '--config', cfg, '--no-color']);
+      assert.equal(r.status, 3);
+      assert.match(r.stderr, /--yes/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it('rejects an unknown --platform for `template`', () => {

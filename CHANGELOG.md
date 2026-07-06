@@ -41,6 +41,11 @@ parity (the browser GUI and terminal TUI are Node-only).
   The Node version edits the document in place and **preserves comments and
   formatting**; the PowerShell port re-serializes via `powershell-yaml` (comments
   are not preserved).
+- **`gitbulk close`** (Node CLI): the cleanup counterpart to a run — closes/declines
+  every open PR of a config's RUs (all four platforms) and deletes the remote
+  feature branches (`git push origin --delete` from each local repo). Destructive:
+  asks for confirmation in a terminal, `--yes` for CI, `--dry-run` to preview,
+  `--json` for a machine-readable report. Exit `1` if any close/delete failed.
 - **New operation `gradle-add-dependency`** (Node CLI + PowerShell port): add a
   dependency to the top-level `dependencies { }` block of a Gradle build file —
   Groovy or Kotlin DSL (chosen by the `buildFilePath` ending), configurable
