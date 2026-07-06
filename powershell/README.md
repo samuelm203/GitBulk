@@ -58,6 +58,12 @@ error (bad config, unknown `-Only` RU). The config format matches the Node versi
 (see the repo root [README](../README.md)); the code change is defined via `script:`
 **or** a declarative `operations:` chain.
 
+`-Status -Watch` polls and re-renders the table (interval via `-Interval <s>`,
+default 30) until no PR is open anymore. `-Close` is the cleanup counterpart to a
+run: it closes/declines every open PR and deletes the remote feature branches
+(`git push origin --delete` from each local repo) — destructive, so it asks for
+confirmation (`-Yes` for CI, `-DryRun` to preview, `-Json` for a report).
+
 For CI pipelines, `-Report run.json` writes a machine-readable JSON report after the
 run (per-RU outcome + PR link/error, totals, exit code; versioned via `reportVersion`,
 never contains tokens) and `-RetryFailed run.json` re-runs only the RUs that failed
