@@ -53,11 +53,6 @@ function Get-GitBulkStatusReport {
         if ($config.rus.Count -eq 0) { writeErr '--only: no RUs left after filtering'; return $null }
     }
 
-    if ([string]$config.prPlatform -eq 'azure-devops') {
-        writeErr "status is not supported for prPlatform 'azure-devops' yet."
-        return $null
-    }
-
     # Token-Guard: status ruft die PR-API → IMMER ein Token nötig (kein Dry-Run).
     $interactive = -not [Console]::IsInputRedirected
     $tok = Resolve-GitBulkToken -Platform ([string]$config.prPlatform) -Interactive:$interactive

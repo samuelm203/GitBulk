@@ -48,14 +48,17 @@ parity (the browser GUI and terminal TUI are Node-only).
   (Ubuntu, Node 22) and writes the coverage table to the job summary.
 - **Dependabot**: weekly update PRs for npm (`node_ts/`, minor/patch grouped)
   and GitHub Actions.
-- **`gitbulk status --watch`** (Node CLI): poll and re-render the status table
-  (interval via `--interval <s>`, default 30) until no PR is open anymore —
-  handy while waiting for reviews. Ctrl+C stops with exit 130.
-- **`gitbulk close`** (Node CLI): the cleanup counterpart to a run — closes/declines
-  every open PR of a config's RUs (all four platforms) and deletes the remote
-  feature branches (`git push origin --delete` from each local repo). Destructive:
-  asks for confirmation in a terminal, `--yes` for CI, `--dry-run` to preview,
-  `--json` for a machine-readable report. Exit `1` if any close/delete failed.
+- **`gitbulk status --watch`** (Node CLI + PowerShell `-Status -Watch`): poll and
+  re-render the status table (interval via `--interval <s>` / `-Interval`,
+  default 30) until no PR is open anymore — handy while waiting for reviews.
+- **`gitbulk close`** (Node CLI + PowerShell `-Close`): the cleanup counterpart to
+  a run — closes/declines every open PR of a config's RUs (all four platforms) and
+  deletes the remote feature branches (`git push origin --delete` from each local
+  repo). Destructive: asks for confirmation in a terminal, `--yes`/`-Yes` for CI,
+  `--dry-run`/`-DryRun` to preview, `--json`/`-Json` for a machine-readable report.
+  Exit `1` if any close/delete failed.
+- **Fixed** (PowerShell): `-Status` no longer rejects `prPlatform: azure-devops` —
+  the guard was stale; the Azure status lookup has existed since the adapter port.
 - **New operation `gradle-add-dependency`** (Node CLI + PowerShell port): add a
   dependency to the top-level `dependencies { }` block of a Gradle build file —
   Groovy or Kotlin DSL (chosen by the `buildFilePath` ending), configurable
