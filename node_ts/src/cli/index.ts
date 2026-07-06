@@ -47,6 +47,7 @@ import { runListOperations } from './list-operations.js';
 import { runAuth } from './auth.js';
 import { runTemplate, TEMPLATE_PLATFORMS } from './template.js';
 import { runStatus } from './status.js';
+import { runClose } from './close.js';
 import { filterRus } from './filter-rus.js';
 import { readFailedRus } from './retry-failed.js';
 import { buildRunReport, writeRunReport } from '../core/report-file.js';
@@ -61,6 +62,7 @@ Usage:
   gitbulk init [options]             Generate an operations config, a script, or both
   gitbulk template [--minimal]       Print a ready-to-edit config template (full by default)
   gitbulk status [--only ...] [--json]  Show the PR status of a config's RUs (read-only)
+  gitbulk close [--dry-run] [--yes]  Close open PRs of a config + delete remote branches
   gitbulk auth <login|logout|status> Store/remove a PR token (~/.gitbulk/credentials.json)
   gitbulk list-operations [--json]   List the available declarative operations
 
@@ -117,6 +119,31 @@ const LIST_HELP = `gitbulk list-operations — List all available declarative op
 
 Options:
       --json   Output as JSON (machine-readable)
+`;
+
+/** Hilfetext für `gitbulk close`. */
+const CLOSE_HELP = `gitbulk close — Close the open PRs of a config's RUs and delete the remote feature branches.
+
+The cleanup counterpart to a bulk run (e.g. after a bad run): resolves the same
+feature branch as a run (<ticket>-<branch>), closes/declines every open PR via the
+platform API and deletes the remote feature branch from each local repo
+(git push origin --delete). Destructive — asks for confirmation in a terminal.
+
+Usage:
+  gitbulk close --config gitbulk.yaml --dry-run   Preview what would be closed/deleted
+  gitbulk close --config gitbulk.yaml             Close + delete (asks for confirmation)
+  gitbulk close --config gitbulk.yaml --yes       No confirmation (for CI)
+
+Options:
+  -c, --config <path>    Path to a config file
+  -m, --mode <mode>      Config mode: "strict" or "hybrid" (default: hybrid)
+      --only <rus>       Only process these RUs (comma-separated subset)
+      --dry-run          Show what would happen; no API calls, no pushes
+      --yes              Skip the confirmation prompt (required in non-TTY mode)
+      --json             Output the report as JSON (machine-readable)
+      --no-color         Disable colored output
+
+Exit codes: 0 ok | 1 a close/delete failed | 3 setup error or aborted
 `;
 
 /** Hilfetext für `gitbulk auth`. */
@@ -208,6 +235,7 @@ function parseCliArgs() {
       platform: { type: 'string' },
       full: { type: 'boolean', default: false },
       minimal: { type: 'boolean', default: false },
+      yes: { type: 'boolean', default: false },
     },
   });
 }
@@ -304,7 +332,7 @@ async function main(): Promise<number> {
       process.stdout.write(INIT_HELP);
       return 0;
     }
-    const initInvalid = ['json', 'platform', 'full', 'minimal'].filter((o) => provided.has(o));
+    const initInvalid = ['json', 'platform', 'full', 'minimal', 'yes'].filter((o) => provided.has(o));
     if (initInvalid.length > 0) {
       return usageError(`Option(s) ${initInvalid.map((o) => `--${o}`).join(', ')} are not valid for \`init\`.`);
     }
@@ -321,7 +349,7 @@ async function main(): Promise<number> {
       process.stdout.write(LIST_HELP);
       return 0;
     }
-    const listInvalid = ['output', 'force', 'platform', 'full', 'minimal'].filter((o) => provided.has(o));
+    const listInvalid = ['output', 'force', 'platform', 'full', 'minimal', 'yes'].filter((o) => provided.has(o));
     if (listInvalid.length > 0) {
       return usageError(
         `Option(s) ${listInvalid.map((o) => `--${o}`).join(', ')} are not valid for \`list-operations\`.`,
@@ -339,7 +367,7 @@ async function main(): Promise<number> {
       process.stdout.write(TEMPLATE_HELP);
       return 0;
     }
-    const templateInvalid = ['json'].filter((o) => provided.has(o));
+    const templateInvalid = ['json', 'yes'].filter((o) => provided.has(o));
     if (templateInvalid.length > 0) {
       return usageError(
         `Option(s) ${templateInvalid.map((o) => `--${o}`).join(', ')} are not valid for \`template\`.`,
@@ -377,7 +405,7 @@ async function main(): Promise<number> {
       process.stdout.write(AUTH_HELP);
       return 0;
     }
-    const authInvalid = ['output', 'force', 'json', 'full', 'minimal'].filter((o) => provided.has(o));
+    const authInvalid = ['output', 'force', 'json', 'full', 'minimal', 'yes'].filter((o) => provided.has(o));
     if (authInvalid.length > 0) {
       return usageError(`Option(s) ${authInvalid.map((o) => `--${o}`).join(', ')} are not valid for \`auth\`.`);
     }
@@ -415,7 +443,7 @@ async function main(): Promise<number> {
     // Optionen des Bulk-Flows oder die anderer Subkommandos.
     const statusInvalid = [
       'output', 'force', 'platform', 'full', 'minimal',
-      'tui', 'gui', 'dry-run', 'deep-log', 'log-level',
+      'tui', 'gui', 'dry-run', 'deep-log', 'log-level', 'yes',
     ].filter((o) => provided.has(o));
     if (statusInvalid.length > 0) {
       return usageError(
@@ -438,18 +466,50 @@ async function main(): Promise<number> {
     if (values.only !== undefined) statusOpts.only = values.only;
     return runStatus(statusOpts);
   }
+  if (subcommand === 'close') {
+    if (values.help) {
+      process.stdout.write(CLOSE_HELP);
+      return 0;
+    }
+    const closeInvalid = [
+      'output', 'force', 'platform', 'full', 'minimal',
+      'tui', 'gui', 'deep-log', 'log-level', 'report', 'retry-failed',
+    ].filter((o) => provided.has(o));
+    if (closeInvalid.length > 0) {
+      return usageError(
+        `Option(s) ${closeInvalid.map((o) => `--${o}`).join(', ')} are not valid for \`close\`.`,
+      );
+    }
+    if (positionals.length > 1) {
+      return usageError(`Unexpected argument "${positionals[1]}" for close.`);
+    }
+    const closeMode = values.mode ?? 'hybrid';
+    if (closeMode !== 'strict' && closeMode !== 'hybrid') {
+      return usageError(`Invalid --mode "${closeMode}". Allowed: strict, hybrid`);
+    }
+    const closeOpts: Parameters<typeof runClose>[0] = {
+      mode: closeMode,
+      dryRun: values['dry-run'] ?? false,
+      yes: values.yes ?? false,
+      json: values.json ?? false,
+      noColor: !useColor,
+    };
+    if (values.config !== undefined) closeOpts.configPath = values.config;
+    if (values.only !== undefined) closeOpts.only = values.only;
+    return runClose(closeOpts);
+  }
   if (subcommand !== undefined) {
     printError(`Unknown command "${subcommand}". Run "gitbulk --help" for usage.`, useColor);
     return 3;
   }
 
   // Subkommando-Optionen sind im Bulk-Flow ungültig (statt still ignoriert).
-  const strayOpts = ['output', 'force', 'json', 'platform', 'full', 'minimal'].filter((o) =>
+  const strayOpts = ['output', 'force', 'json', 'platform', 'full', 'minimal', 'yes'].filter((o) =>
     provided.has(o),
   );
   if (strayOpts.length > 0) {
     return usageError(
-      `Option(s) ${strayOpts.map((o) => `--${o}`).join(', ')} are only valid for a subcommand (init / template / status / auth / list-operations).`,
+      `Option(s) ${strayOpts.map((o) => `--${o}`).join(', ')} are only valid for a subcommand (init / template / status / close / auth / list-operations).`,
     );
   }
 

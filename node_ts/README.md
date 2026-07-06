@@ -412,6 +412,11 @@ gitbulk [options]
   -h, --help             Show help
       -fish, -fisch      Show a compact command/option matrix (alias help)
 
+gitbulk close [options]         Close the open PRs of a config's RUs + delete the remote
+                                feature branches (cleanup after a bad run). Destructive:
+                                asks for confirmation; --yes for CI; --dry-run to preview;
+                                --json for a machine-readable report.
+
 gitbulk init [options]          Interactively generate a config or a standalone .mjs/.ts script
   -o, --output <path>    Output file path
   -f, --force            Overwrite the output file instead of auto-incrementing the name
