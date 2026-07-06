@@ -1,6 +1,6 @@
 {
   "name": "@samuelm203/gitbulk",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Configurable CLI tool for bulk operations on Git repositories",
   "license": "Apache-2.0",
   "author": "Samuel Ming",
