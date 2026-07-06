@@ -89,6 +89,49 @@ jobs:
       - name: Test
         run: npm test
 
+  # ── Coverage (nur Ubuntu + Node 22, braucht Node ≥ 22) ─────────────
+  # Läuft die Suite einmal mit V8-Coverage und schreibt die Zusammenfassung in
+  # die Job-Summary. Bewusst nicht Teil der Matrix: ein Lauf genügt, und die
+  # Coverage-Option existiert erst ab Node 22.
+  coverage:
+    name: Coverage (ubuntu-latest, Node 22)
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: node_ts
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: node_ts/package-lock.json
+
+      - name: Configure Git
+        shell: bash
+        run: |
+          git config --global user.email "ci@example.com"
+          git config --global user.name "CI Runner"
+          git config --global init.defaultBranch master
+        working-directory: ${{ github.workspace }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Test with coverage
+        run: |
+          npm run test:coverage 2>&1 | tee coverage.log
+          # Coverage-Tabelle in die Job-Summary übernehmen (ab "start of coverage report").
+          echo '## Coverage' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          awk '/start of coverage report/{on=1} on{print}' coverage.log | tail -n +2 >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
   # ── PowerShell-Port (powershell/) ──────────────────────────────────
   # Eigener Job: lintet (PSScriptAnalyzer) und testet (Pester v5) die native
   # PowerShell-Implementierung mit pwsh auf allen drei Betriebssystemen.
