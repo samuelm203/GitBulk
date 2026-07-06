@@ -432,6 +432,9 @@ gitbulk status [options]        Show the PR status of a config's RUs (read-only)
   -m, --mode <mode>      "strict" or "hybrid" (default: hybrid)
       --only <rus>       Only check these RUs (comma-separated subset)
       --json             Output as JSON (machine-readable)
+      --watch            Poll and re-render until all PRs are merged/declined
+                         (Ctrl+C stops with exit 130)
+      --interval <s>     Poll interval in seconds for --watch (default: 30)
 
 gitbulk auth <login|logout|status>  Store/remove a PR token (~/.gitbulk/credentials.json)
       --platform <p>     bitbucket | github (required for login)

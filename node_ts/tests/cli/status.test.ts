@@ -6,7 +6,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { formatStatusReport, formatStatusJson } from '../../src/cli/status.js';
+import { formatStatusReport, formatStatusJson, watchSettled } from '../../src/cli/status.js';
 import type { PrStatusReport } from '../../src/git/pr-status.js';
 
 const ESC = String.fromCharCode(27);
@@ -23,6 +23,22 @@ const report: PrStatusReport = {
   ],
   totals: { open: 1, merged: 1, declined: 0, none: 1, errored: 1 },
 };
+
+describe('watchSettled', () => {
+  const base = (totals: PrStatusReport['totals']): PrStatusReport => ({
+    ...report,
+    totals,
+  });
+
+  it('keeps polling while a PR is open or an RU errored', () => {
+    assert.equal(watchSettled(base({ open: 1, merged: 0, declined: 0, none: 0, errored: 0 })), false);
+    assert.equal(watchSettled(base({ open: 0, merged: 1, declined: 0, none: 0, errored: 1 })), false);
+  });
+
+  it('is settled when nothing is open and nothing errored (none counts as terminal)', () => {
+    assert.equal(watchSettled(base({ open: 0, merged: 2, declined: 1, none: 1, errored: 0 })), true);
+  });
+});
 
 describe('formatStatusReport', () => {
   it('renders header, rows and a summary (no-color)', () => {

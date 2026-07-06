@@ -76,6 +76,29 @@ describe('CLI usage hygiene (subcommand vs bulk-flow options)', () => {
     assert.match(r.stderr, /mutually exclusive/);
   });
 
+  it('rejects --watch combined with --json for `status`', () => {
+    const r = runCli(['status', '--watch', '--json', '--no-color']);
+    assert.equal(r.status, 3);
+    assert.match(r.stderr, /mutually exclusive/);
+  });
+
+  it('rejects --interval without --watch and validates the value', () => {
+    const r1 = runCli(['status', '--interval', '10', '--no-color']);
+    assert.equal(r1.status, 3);
+    assert.match(r1.stderr, /requires `--watch`/);
+
+    const r2 = runCli(['status', '--watch', '--interval', 'abc', '--no-color']);
+    assert.equal(r2.status, 3);
+    assert.match(r2.stderr, /Invalid --interval/);
+  });
+
+  it('rejects --watch for subcommands like close', () => {
+    const r = runCli(['close', '--watch', '--no-color']);
+    assert.equal(r.status, 3);
+    assert.match(r.stderr, /--watch/);
+    assert.match(r.stderr, /not valid for `close`/);
+  });
+
   it('prints help for `close` (exit 0)', () => {
     const r = runCli(['close', '--help']);
     assert.equal(r.status, 0);

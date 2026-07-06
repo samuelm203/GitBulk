@@ -193,12 +193,16 @@ Usage:
   gitbulk status --config gitbulk.yaml            Table of PR states for all RUs
   gitbulk status --config gitbulk.yaml --only a,b Restrict to a subset of RUs
   gitbulk status --config gitbulk.yaml --json     Machine-readable output (for CI)
+  gitbulk status --config gitbulk.yaml --watch    Refresh until no PR is open
 
 Options:
   -c, --config <path>    Path to a config file
   -m, --mode <mode>      Config mode: "strict" or "hybrid" (default: hybrid)
       --only <rus>       Only check these RUs (comma-separated subset)
       --json             Output as JSON (machine-readable)
+      --watch            Poll and re-render the table until all PRs are merged/
+                         declined (exit 0) — Ctrl+C stops with exit 130
+      --interval <s>     Poll interval in seconds for --watch (default: 30)
       --no-color         Disable colored output
 `;
 
@@ -236,6 +240,8 @@ function parseCliArgs() {
       full: { type: 'boolean', default: false },
       minimal: { type: 'boolean', default: false },
       yes: { type: 'boolean', default: false },
+      watch: { type: 'boolean', default: false },
+      interval: { type: 'string' },
     },
   });
 }
@@ -332,7 +338,7 @@ async function main(): Promise<number> {
       process.stdout.write(INIT_HELP);
       return 0;
     }
-    const initInvalid = ['json', 'platform', 'full', 'minimal', 'yes'].filter((o) => provided.has(o));
+    const initInvalid = ['json', 'platform', 'full', 'minimal', 'yes', 'watch', 'interval'].filter((o) => provided.has(o));
     if (initInvalid.length > 0) {
       return usageError(`Option(s) ${initInvalid.map((o) => `--${o}`).join(', ')} are not valid for \`init\`.`);
     }
@@ -349,7 +355,7 @@ async function main(): Promise<number> {
       process.stdout.write(LIST_HELP);
       return 0;
     }
-    const listInvalid = ['output', 'force', 'platform', 'full', 'minimal', 'yes'].filter((o) => provided.has(o));
+    const listInvalid = ['output', 'force', 'platform', 'full', 'minimal', 'yes', 'watch', 'interval'].filter((o) => provided.has(o));
     if (listInvalid.length > 0) {
       return usageError(
         `Option(s) ${listInvalid.map((o) => `--${o}`).join(', ')} are not valid for \`list-operations\`.`,
@@ -367,7 +373,7 @@ async function main(): Promise<number> {
       process.stdout.write(TEMPLATE_HELP);
       return 0;
     }
-    const templateInvalid = ['json', 'yes'].filter((o) => provided.has(o));
+    const templateInvalid = ['json', 'yes', 'watch', 'interval'].filter((o) => provided.has(o));
     if (templateInvalid.length > 0) {
       return usageError(
         `Option(s) ${templateInvalid.map((o) => `--${o}`).join(', ')} are not valid for \`template\`.`,
@@ -405,7 +411,7 @@ async function main(): Promise<number> {
       process.stdout.write(AUTH_HELP);
       return 0;
     }
-    const authInvalid = ['output', 'force', 'json', 'full', 'minimal', 'yes'].filter((o) => provided.has(o));
+    const authInvalid = ['output', 'force', 'json', 'full', 'minimal', 'yes', 'watch', 'interval'].filter((o) => provided.has(o));
     if (authInvalid.length > 0) {
       return usageError(`Option(s) ${authInvalid.map((o) => `--${o}`).join(', ')} are not valid for \`auth\`.`);
     }
@@ -457,6 +463,19 @@ async function main(): Promise<number> {
     if (statusMode !== 'strict' && statusMode !== 'hybrid') {
       return usageError(`Invalid --mode "${statusMode}". Allowed: strict, hybrid`);
     }
+    if (values.watch && values.json) {
+      return usageError('`--watch` and `--json` are mutually exclusive.');
+    }
+    let intervalSeconds: number | undefined;
+    if (values.interval !== undefined) {
+      if (!values.watch) {
+        return usageError('`--interval` requires `--watch`.');
+      }
+      intervalSeconds = Number(values.interval);
+      if (!Number.isInteger(intervalSeconds) || intervalSeconds < 1) {
+        return usageError(`Invalid --interval "${values.interval}". Use a positive integer (seconds).`);
+      }
+    }
     const statusOpts: Parameters<typeof runStatus>[0] = {
       mode: statusMode,
       json: values.json ?? false,
@@ -464,6 +483,8 @@ async function main(): Promise<number> {
     };
     if (values.config !== undefined) statusOpts.configPath = values.config;
     if (values.only !== undefined) statusOpts.only = values.only;
+    if (values.watch) statusOpts.watch = true;
+    if (intervalSeconds !== undefined) statusOpts.intervalSeconds = intervalSeconds;
     return runStatus(statusOpts);
   }
   if (subcommand === 'close') {
@@ -473,7 +494,7 @@ async function main(): Promise<number> {
     }
     const closeInvalid = [
       'output', 'force', 'platform', 'full', 'minimal',
-      'tui', 'gui', 'deep-log', 'log-level', 'report', 'retry-failed',
+      'tui', 'gui', 'deep-log', 'log-level', 'report', 'retry-failed', 'watch', 'interval',
     ].filter((o) => provided.has(o));
     if (closeInvalid.length > 0) {
       return usageError(
@@ -504,7 +525,7 @@ async function main(): Promise<number> {
   }
 
   // Subkommando-Optionen sind im Bulk-Flow ungültig (statt still ignoriert).
-  const strayOpts = ['output', 'force', 'json', 'platform', 'full', 'minimal', 'yes'].filter((o) =>
+  const strayOpts = ['output', 'force', 'json', 'platform', 'full', 'minimal', 'yes', 'watch', 'interval'].filter((o) =>
     provided.has(o),
   );
   if (strayOpts.length > 0) {
