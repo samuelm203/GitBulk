@@ -96,3 +96,23 @@ function New-AzureDevOpsPullRequest {
     if ($resp.message) { $msg = "HTTP $status`: $($resp.message)" }
     return @{ Ok = $false; Id = $null; Url = ''; StatusCode = $status; Error = $msg }
 }
+
+# Schließt einen offenen PR (gitbulk -Close → Azure: "abandoned").
+# PATCH /pullrequests/{id}?api-version=7.1 status=abandoned.
+function Close-AzureDevOpsPullRequest {
+    param(
+        [Parameter(Mandatory)] $AzureConfig,
+        [Parameter(Mandatory)][string]$Token,
+        [Parameter(Mandatory)][string]$Ru,
+        [Parameter(Mandatory)] $Id,
+        [string]$Workspace = ''
+    )
+    $orgBase = Get-AzureDevOpsOrgBase -AzureConfig $AzureConfig
+    $project = if (-not [string]::IsNullOrEmpty($Workspace)) { $Workspace } else { [string]$AzureConfig.project }
+    $headers = Get-AzureDevOpsAuthHeader -Token $Token
+    $url = "$orgBase/$([uri]::EscapeDataString($project))/_apis/git/repositories/$([uri]::EscapeDataString($Ru))/pullrequests/${Id}?api-version=7.1"
+    $http = Invoke-GitBulkHttp -Uri $url -Method Patch -Headers $headers -Body @{ status = 'abandoned' }
+    if ($http.Error) { return @{ Ok = $false; StatusCode = 0; Error = "network error: $($http.Error)" } }
+    if ($http.StatusCode -eq 200) { return @{ Ok = $true; StatusCode = 200; Error = $null } }
+    return @{ Ok = $false; StatusCode = $http.StatusCode; Error = "HTTP $($http.StatusCode)" }
+}

@@ -94,3 +94,40 @@ function New-BitbucketPullRequest {
     elseif ((-not $cloud) -and $resp.errors -and $resp.errors[0].message) { $msg = "HTTP $status`: $($resp.errors[0].message)" }
     return @{ Ok = $false; Id = $null; Url = ''; StatusCode = $status; Error = $msg }
 }
+
+# Declined einen offenen PR (gitbulk -Close). Cloud: POST /decline direkt;
+# Server verlangt die aktuelle PR-version (vorab per GET geholt).
+function Close-BitbucketPullRequest {
+    param(
+        [Parameter(Mandatory)] $BitbucketConfig,
+        [Parameter(Mandatory)][string]$Token,
+        [Parameter(Mandatory)][string]$Ru,
+        [Parameter(Mandatory)] $Id,
+        [string]$Workspace = ''
+    )
+    $cloud = $BitbucketConfig.apiVariant -ne 'server'
+    $apiBase = if ($BitbucketConfig.Contains('apiBaseUrl') -and $BitbucketConfig.apiBaseUrl) {
+        ([string]$BitbucketConfig.apiBaseUrl).TrimEnd('/')
+    } else { 'https://api.bitbucket.org/2.0' }
+    $ws = if (-not [string]::IsNullOrEmpty($Workspace)) { $Workspace } else { [string]$BitbucketConfig.workspace }
+    $authHeader = if ($Token.Contains(':')) {
+        'Basic ' + [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($Token))
+    } else { "Bearer $Token" }
+    $headers = @{ Authorization = $authHeader; Accept = 'application/json' }
+
+    if ($cloud) {
+        $url = "$apiBase/repositories/$([uri]::EscapeDataString($ws))/$([uri]::EscapeDataString($Ru))/pullrequests/$Id/decline"
+    } else {
+        $prUrl = "$apiBase/rest/api/1.0/projects/$([uri]::EscapeDataString($ws))/repos/$([uri]::EscapeDataString($Ru))/pull-requests/$Id"
+        $get = Invoke-GitBulkHttp -Uri $prUrl -Method Get -Headers $headers
+        if ($get.Error) { return @{ Ok = $false; StatusCode = 0; Error = "network error: $($get.Error)" } }
+        if ($get.StatusCode -ne 200) { return @{ Ok = $false; StatusCode = $get.StatusCode; Error = "HTTP $($get.StatusCode) (version lookup)" } }
+        if ($null -eq $get.Body.version) { return @{ Ok = $false; StatusCode = 200; Error = 'PR version missing in server response' } }
+        $url = "$prUrl/decline?version=$($get.Body.version)"
+    }
+
+    $http = Invoke-GitBulkHttp -Uri $url -Method Post -Headers $headers
+    if ($http.Error) { return @{ Ok = $false; StatusCode = 0; Error = "network error: $($http.Error)" } }
+    if ($http.StatusCode -in @(200, 204)) { return @{ Ok = $true; StatusCode = $http.StatusCode; Error = $null } }
+    return @{ Ok = $false; StatusCode = $http.StatusCode; Error = "HTTP $($http.StatusCode)" }
+}
